@@ -58,6 +58,15 @@ class HomePage extends StatelessWidget {
                 'Start building your feature on your own branch!',
                 textAlign: TextAlign.center,
               ),
+              const SizedBox(height: 14),
+              ElevatedButton(
+                  onPressed: () {},
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blueGrey,
+                    foregroundColor: Colors.amber,
+                  ),
+                  child: Text("Click me")
+              ),
             ],
           ),
         ),
