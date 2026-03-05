@@ -24,7 +24,7 @@ Fix any issues reported before continuing.
 1. **Clone the repository**
 
    ```
-   git clone <repo-url>
+   git clone https://github.com/MatejPechoucek/scenario2project
    cd scenario2project
    ```
 

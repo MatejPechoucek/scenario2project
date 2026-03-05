@@ -43,3 +43,9 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Claude MD File (if using)
+/CLAUDE.md
+
+# IntelliJ Idea related extras
+.idea/misc.xml
