@@ -49,3 +49,6 @@ app.*.map.json
 
 # IntelliJ Idea related extras
 .idea/misc.xml
+
+# Out files
+out/

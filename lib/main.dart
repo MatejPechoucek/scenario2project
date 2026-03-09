@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+
+import 'pages/diet_page.dart';
 import 'pages/home_page.dart';
 import 'pages/profile_page.dart';
+import 'pages/qna_page.dart';
 
 void main() {
   runApp(const MyApp());
@@ -34,6 +37,8 @@ class _MainShellState extends State<MainShell> {
 
   static const List<Widget> _pages = [
     HomePage(),
+    DietPage(),
+    QnaPage(),
     ProfilePage(),
   ];
 
@@ -49,8 +54,10 @@ class _MainShellState extends State<MainShell> {
         currentIndex: _selectedIndex,
         onTap: (index) => setState(() => _selectedIndex = index),
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+          BottomNavigationBarItem(icon: Icon(Icons.home, color: Colors.black), label: "", backgroundColor: Colors.white),
+          BottomNavigationBarItem(icon: Icon(Icons.apple, color: Colors.black), label: "", backgroundColor: Colors.white),
+          BottomNavigationBarItem(icon: Icon(Icons.note, color: Colors.black), label: "", backgroundColor: Colors.white),
+          BottomNavigationBarItem(icon: Icon(Icons.person, color: Colors.black), label: "", backgroundColor: Colors.white),
         ],
       ),
     );

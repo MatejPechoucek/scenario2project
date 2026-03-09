@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-class ProfilePage extends StatelessWidget {
-  const ProfilePage({super.key});
+class QnaPage extends StatelessWidget {
+  const QnaPage({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -18,7 +18,7 @@ class ProfilePage extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             Text(
-              'Profile',
+              'QnA Page',
               style: Theme.of(context).textTheme.headlineMedium,
               textAlign: TextAlign.center,
             ),
@@ -27,4 +27,5 @@ class ProfilePage extends StatelessWidget {
       ),
     );
   }
+
 }
