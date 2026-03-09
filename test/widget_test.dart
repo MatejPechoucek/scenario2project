@@ -85,8 +85,6 @@ void main() {
   });
 
   group('ProfilePage', () {
-    setUp(() async {});
-
     testWidgets('displays flutter_dash icon', (WidgetTester tester) async {
       await tester.pumpWidget(const MyApp());
 
