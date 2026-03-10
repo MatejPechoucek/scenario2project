@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-import 'pages/diet_page.dart';
-import 'pages/home_page.dart';
-import 'pages/profile_page.dart';
-import 'pages/qna_page.dart';
+import 'pages/dietpage/diet_page.dart';
+import 'pages/homepage/home_page.dart';
+import 'pages/profilepage/profile_page.dart';
+import 'pages/qnapage/qna_page.dart';
 
 void main() {
   runApp(const MyApp());
