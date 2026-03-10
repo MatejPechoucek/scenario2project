@@ -116,6 +116,71 @@ void main() {
     });
   });
 
+  group('DietPage', () {
+    Future<void> openDietPage(WidgetTester tester) async {
+      await tester.pumpWidget(const MyApp());
+      await tester.tap(find.byIcon(Icons.apple));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('shows Diet Plan heading', (WidgetTester tester) async {
+      await openDietPage(tester);
+      expect(find.text('Diet Plan'), findsOneWidget);
+    });
+
+    testWidgets('shows all meal cards', (WidgetTester tester) async {
+      await openDietPage(tester);
+      expect(find.text('Healthy Gain'), findsOneWidget);
+      expect(find.text('Manage Deficiency'), findsOneWidget);
+      expect(find.text('Muscle Gain'), findsOneWidget);
+      expect(find.text('Custom'), findsOneWidget);
+    });
+
+    testWidgets('shows all calculator fields', (WidgetTester tester) async {
+      await openDietPage(tester);
+      expect(find.text('Height (CM)'), findsOneWidget);
+      expect(find.text('Weight'), findsOneWidget);
+      expect(find.text('Age'), findsOneWidget);
+      expect(find.text('Activity Level'), findsOneWidget);
+    });
+
+    testWidgets('spinner fields start at 0', (WidgetTester tester) async {
+      await openDietPage(tester);
+      final fields = tester.widgetList<TextField>(find.byType(TextField)).toList();
+      for (final field in fields) {
+        expect(field.controller?.text, '0');
+      }
+    });
+
+    testWidgets('up arrow increments spinner value', (WidgetTester tester) async {
+      await openDietPage(tester);
+      await tester.tap(find.byIcon(Icons.arrow_drop_up).first);
+      await tester.pump();
+      final firstField = tester.widgetList<TextField>(find.byType(TextField)).first;
+      expect(firstField.controller?.text, '1');
+    });
+
+    testWidgets('down arrow does not go below 0', (WidgetTester tester) async {
+      await openDietPage(tester);
+      await tester.tap(find.byIcon(Icons.arrow_drop_down).first);
+      await tester.pump();
+      final firstField = tester.widgetList<TextField>(find.byType(TextField)).first;
+      expect(firstField.controller?.text, '0');
+    });
+
+    testWidgets('Activity Level does not exceed max of 9', (WidgetTester tester) async {
+      await openDietPage(tester);
+      final upArrows = find.byIcon(Icons.arrow_drop_up);
+      // Tap the last up arrow (Activity Level) 10 times
+      for (int i = 0; i < 10; i++) {
+        await tester.tap(upArrows.last);
+        await tester.pump();
+      }
+      final lastField = tester.widgetList<TextField>(find.byType(TextField)).last;
+      expect(lastField.controller?.text, '9');
+    });
+  });
+
   group('MyApp', () {
     testWidgets('has correct app title', (WidgetTester tester) async {
       await tester.pumpWidget(const MyApp());
