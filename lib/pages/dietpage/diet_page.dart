@@ -52,6 +52,7 @@ class _DietPageState extends State<DietPage> {
           ),
           const SizedBox(height: 8),
           _CalorieCard(calories: _calories),
+          _TargetSliders(),
         ],
       ),
     );
@@ -125,6 +126,50 @@ class _CalorieCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+
+class _TargetSliders extends StatefulWidget {
+  const _TargetSliders();
+
+  @override
+  State<_TargetSliders> createState() => _TargetSlidersState();
+}
+
+class _TargetSlidersState extends State<_TargetSliders> {
+  final List<double> _macros = [0, 0, 0];
+  static const _macroNames = [
+    'Protein',
+    'Fat',
+    'Carbs',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
+        mainAxisExtent: 100,
+      ),
+      itemCount: 3,
+      itemBuilder: (context, index) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(_macroNames[index], style: Theme.of(context).textTheme.headlineSmall),
+          Slider(
+            value: _macros[index],
+            label: _macroNames[index],
+            max: 100,
+            onChanged: (val) => setState(() => _macros[index] = val),
+          ),
+        ]
+      )
     );
   }
 }
