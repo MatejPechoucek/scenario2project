@@ -76,7 +76,7 @@ For example:
 git checkout -b alice/add-login-page
 ```
 
-Make all of your commits ato keep track:
+Make all of your commits to keep track:
 
 ```
 git commit -m "<commit message>"
