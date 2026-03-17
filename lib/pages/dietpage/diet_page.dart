@@ -10,7 +10,6 @@ class DietPage extends StatefulWidget {
   State<DietPage> createState() => _DietPageState();
 }
 
-
 class _DietPageState extends State<DietPage> {
   static const _meals = [
     'Healthy Gain',
@@ -28,6 +27,8 @@ class _DietPageState extends State<DietPage> {
 
   final List<int> _values = [0, 0, 0, 0];
 
+  final List<int> _values2 = [0, 0, 0, 0];
+
   int get _calories => CalorieCalculator.calculate(
     heightCm:      _values[0],
     weightKg:      _values[1],
@@ -35,11 +36,19 @@ class _DietPageState extends State<DietPage> {
     activityLevel: _values[3],
   );
 
+  int get _calories2 => CalorieCalculator.calculate(
+    heightCm:      _values2[0],
+    weightKg:      _values2[1],
+    age:           _values2[2],
+    activityLevel: _values2[3],
+  );
+
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
-      child: Column(
+    return SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('Diet Plan', style: Theme.of(context).textTheme.headlineMedium),
@@ -52,8 +61,9 @@ class _DietPageState extends State<DietPage> {
           ),
           const SizedBox(height: 8),
           _CalorieCard(calories: _calories),
-          _TargetSliders(),
-        ],
+          _TargetMealPlan(),
+          ],
+        ),
       ),
     );
   }
@@ -152,16 +162,16 @@ class _TargetSlidersState extends State<_TargetSliders> {
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
+        crossAxisCount: 1,
         crossAxisSpacing: 8,
-        mainAxisSpacing: 8,
+        mainAxisSpacing: 0,
         mainAxisExtent: 100,
       ),
       itemCount: 3,
       itemBuilder: (context, index) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(_macroNames[index], style: Theme.of(context).textTheme.headlineSmall),
+          Text(_macroNames[index], style: Theme.of(context).textTheme.bodyLarge),
           Slider(
             value: _macros[index],
             label: _macroNames[index],
@@ -170,6 +180,45 @@ class _TargetSlidersState extends State<_TargetSliders> {
           ),
         ]
       )
+    );
+  }
+}
+
+class _MealPlan extends StatelessWidget {
+  const _MealPlan({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 1,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
+        mainAxisExtent: 150,
+      ),
+      itemCount: 3,
+      itemBuilder: (context, index) => Card(
+        child: Center(
+          child: Text(index.toString())
+        ),
+      ),
+    );
+  }
+}
+
+class _TargetMealPlan extends StatelessWidget {
+  const _TargetMealPlan();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: _TargetSliders()),
+        Expanded(child: _MealPlan()),
+      ],
     );
   }
 }
