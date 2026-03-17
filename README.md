@@ -76,10 +76,18 @@ For example:
 git checkout -b alice/add-login-page
 ```
 
+Make all of your commits ato keep track:
+
+```
+git commit -m "<commit message>"
+```
+
 When your feature is ready, push your branch and open a pull request:
 
 ```
 git push origin your-name/feature-description
+or
+git push
 ```
 
 This keeps `master` clean and makes it easy to review each other's work.
