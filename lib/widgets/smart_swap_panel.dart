@@ -13,7 +13,7 @@ import '../database/food_item.dart';
 ///   • Non-judgmental language — "You might also enjoy..." not "BAD FOOD".
 ///   • Neutral colours — no danger red; uses the app's purple seed palette.
 ///   • Optional — the panel can be dismissed without penalty.
-///   • Calorie increases are capped by the algorithm (≤10% more).
+///   • Only suggests foods from compatible categories and the correct meal slot.
 class SmartSwapPanel extends StatefulWidget {
   /// The food item to find alternatives for.
   final FoodItem food;
@@ -21,10 +21,15 @@ class SmartSwapPanel extends StatefulWidget {
   /// The pool of candidate foods (typically FoodRepository.getAllBaseFoods()).
   final List<FoodItem> foodBank;
 
+  /// The meal slot context: 'breakfast', 'lunch', 'dinner', or 'snack'.
+  /// Filters suggestions to only foods appropriate for this time of day.
+  final String mealSlot;
+
   const SmartSwapPanel({
     super.key,
     required this.food,
     required this.foodBank,
+    this.mealSlot = 'any',
   });
 
   @override
@@ -42,6 +47,7 @@ class _SmartSwapPanelState extends State<SmartSwapPanel> {
     _suggestions = NutritionalProximityAlgorithm.findAlternatives(
       widget.food,
       widget.foodBank,
+      mealSlot: widget.mealSlot,
       maxResults: 3,
     );
   }

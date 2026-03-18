@@ -235,6 +235,7 @@ class _MealPlanState extends State<_MealPlan> {
               meal: meal,
               mealAsFood: mealAsFood,
               foodBank: foodBank,
+              mealSlot: meal.mealSlot,
             );
           },
         );
@@ -264,11 +265,13 @@ class _MealCard extends StatelessWidget {
   final Meal meal;
   final FoodItem mealAsFood;
   final List<FoodItem> foodBank;
+  final String mealSlot;
 
   const _MealCard({
     required this.meal,
     required this.mealAsFood,
     required this.foodBank,
+    this.mealSlot = 'any',
   });
 
   @override
@@ -279,6 +282,7 @@ class _MealCard extends StatelessWidget {
         NutritionalProximityAlgorithm.findAlternatives(
           mealAsFood,
           foodBank,
+          mealSlot: mealSlot,
           maxResults: 1,
         ).isNotEmpty;
 
@@ -321,11 +325,12 @@ class _MealCard extends StatelessWidget {
               carbsG: meal.carbsG,
             ),
 
-            // ── Smart Swap panel (NEW — only shown when flagged) ──────────
+            // ── Smart Swap panel (only shown when flagged + has suggestions) ─
             if (hasSuggestions)
               SmartSwapPanel(
                 food: mealAsFood,
                 foodBank: foodBank,
+                mealSlot: mealSlot,
               ),
           ],
         ),

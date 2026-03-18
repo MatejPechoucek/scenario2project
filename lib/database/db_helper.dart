@@ -8,10 +8,8 @@ import 'meal.dart';
 ///
 /// Database version history:
 ///   v1 — initial: meals(id, name, description, calories)
-///   v2 — added macro/micro columns to meals; added food_cache table
-///
-/// The food_cache table stores USDA API results with a 24-hour TTL,
-/// avoiding redundant network calls during a session or the next day.
+///   v2 — macro/micro columns added to meals; food_cache table added
+///   v3 — meal_slot column added to meals (breakfast/lunch/dinner/snack)
 class DbHelper {
   static Database? _db;
 
@@ -26,7 +24,7 @@ class DbHelper {
     final path = join(await getDatabasesPath(), 'diet_plan.db');
     return openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -40,11 +38,9 @@ class DbHelper {
   }
 
   /// Called when the existing database version < current version.
-  /// Handles upgrading from v1 → v2 gracefully.
   static Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
-      // Add new macro/micro columns to the existing meals table.
-      // SQLite requires individual ALTER TABLE statements per column.
+      // Add macro/micro columns to meals table.
       for (final col in [
         'ALTER TABLE meals ADD COLUMN protein_g REAL DEFAULT 0',
         'ALTER TABLE meals ADD COLUMN fat_g REAL DEFAULT 0',
@@ -55,13 +51,19 @@ class DbHelper {
       ]) {
         await db.execute(col);
       }
-
-      // Backfill the three seeded meals with real nutritional data.
-      // Values are approximate totals for a typical serving of each meal.
       await _backfillMealNutrition(db);
-
-      // Create the food cache table (new in v2).
       await _createFoodCacheTable(db);
+    }
+    if (oldVersion < 3) {
+      // Add meal_slot so the algorithm knows meal context (breakfast/lunch/dinner).
+      await db.execute(
+          "ALTER TABLE meals ADD COLUMN meal_slot TEXT DEFAULT 'any'");
+      await db.execute(
+          "UPDATE meals SET meal_slot = 'breakfast' WHERE name = 'Breakfast'");
+      await db.execute(
+          "UPDATE meals SET meal_slot = 'lunch' WHERE name = 'Lunch'");
+      await db.execute(
+          "UPDATE meals SET meal_slot = 'dinner' WHERE name = 'Dinner'");
     }
   }
 
@@ -70,16 +72,17 @@ class DbHelper {
   static Future<void> _createMealsTable(Database db) async {
     await db.execute('''
       CREATE TABLE meals (
-        id         INTEGER PRIMARY KEY AUTOINCREMENT,
-        name       TEXT NOT NULL,
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        name        TEXT NOT NULL,
         description TEXT NOT NULL,
-        calories   INTEGER NOT NULL,
-        protein_g  REAL DEFAULT 0,
-        fat_g      REAL DEFAULT 0,
-        carbs_g    REAL DEFAULT 0,
-        sugar_g    REAL DEFAULT 0,
-        sodium_mg  REAL DEFAULT 0,
-        fiber_g    REAL DEFAULT 0
+        calories    INTEGER NOT NULL,
+        meal_slot   TEXT DEFAULT 'any',
+        protein_g   REAL DEFAULT 0,
+        fat_g       REAL DEFAULT 0,
+        carbs_g     REAL DEFAULT 0,
+        sugar_g     REAL DEFAULT 0,
+        sodium_mg   REAL DEFAULT 0,
+        fiber_g     REAL DEFAULT 0
       )
     ''');
   }
@@ -106,14 +109,14 @@ class DbHelper {
   // ── Seed data ─────────────────────────────────────────────────────────────
 
   /// Seeds the three default meals on a fresh install.
-  /// Nutritional values are approximate totals for a typical serving,
-  /// sourced from USDA SR Legacy data for each ingredient.
+  /// Nutritional values are approximate totals for a typical serving.
   static Future<void> _seedMeals(Database db) async {
     final meals = [
       const Meal(
         name: 'Breakfast',
         description: 'Oats, banana, eggs',
         calories: 520,
+        mealSlot: 'breakfast',
         proteinG: 22.0,
         fatG: 14.0,
         carbsG: 72.0,
@@ -125,6 +128,7 @@ class DbHelper {
         name: 'Lunch',
         description: 'Chicken breast, rice, broccoli',
         calories: 680,
+        mealSlot: 'lunch',
         proteinG: 45.0,
         fatG: 8.0,
         carbsG: 78.0,
@@ -136,6 +140,7 @@ class DbHelper {
         name: 'Dinner',
         description: 'Salmon fillet, sweet potato, mixed salad',
         calories: 600,
+        mealSlot: 'dinner',
         proteinG: 38.0,
         fatG: 18.0,
         carbsG: 48.0,
@@ -144,14 +149,12 @@ class DbHelper {
         fiberG: 6.0,
       ),
     ];
-
     for (final meal in meals) {
       await db.insert('meals', meal.toMap());
     }
   }
 
-  /// Backfills nutritional data for the three existing seeded meals
-  /// when upgrading a v1 database to v2.
+  /// Backfills nutritional data for existing seeded meals when upgrading v1→v2.
   static Future<void> _backfillMealNutrition(Database db) async {
     final updates = [
       {
@@ -170,7 +173,6 @@ class DbHelper {
         'sugar_g': 12.0,   'sodium_mg': 480.0, 'fiber_g': 6.0,
       },
     ];
-
     for (final u in updates) {
       await db.update(
         'meals',
@@ -213,44 +215,31 @@ class DbHelper {
 
   // ── Food cache CRUD ───────────────────────────────────────────────────────
 
-  /// Cache TTL: 24 hours in milliseconds.
   static const int _cacheTtlMs = 24 * 60 * 60 * 1000;
 
-  /// Inserts or replaces a [FoodItem] in the local cache.
   static Future<void> cacheFoodItem(FoodItem item) async {
     final db = await database;
     final map = item.toMap();
     map['cached_at'] = DateTime.now().millisecondsSinceEpoch;
-    await db.insert(
-      'food_cache',
-      map,
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await db.insert('food_cache', map,
+        conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
-  /// Retrieves a [FoodItem] from the cache by its ID.
-  /// Returns null if not found or if the cached entry has expired (>24h).
   static Future<FoodItem?> getCachedFood(String id) async {
     final db = await database;
-    final rows = await db.query(
-      'food_cache',
-      where: 'id = ?',
-      whereArgs: [id],
-      limit: 1,
-    );
+    final rows = await db.query('food_cache',
+        where: 'id = ?', whereArgs: [id], limit: 1);
     if (rows.isEmpty) return null;
     final row = rows.first;
-    final cachedAt = row['cached_at'] as int;
-    final age = DateTime.now().millisecondsSinceEpoch - cachedAt;
+    final age =
+        DateTime.now().millisecondsSinceEpoch - (row['cached_at'] as int);
     if (age > _cacheTtlMs) {
-      // Expired — delete and return null
       await db.delete('food_cache', where: 'id = ?', whereArgs: [id]);
       return null;
     }
     return FoodItem.fromMap(row);
   }
 
-  /// Bulk-caches a list of [FoodItem]s returned from a USDA API search.
   static Future<void> cacheFoodItems(List<FoodItem> items) async {
     final db = await database;
     final batch = db.batch();
@@ -258,22 +247,19 @@ class DbHelper {
     for (final item in items) {
       final map = item.toMap();
       map['cached_at'] = now;
-      batch.insert('food_cache', map, conflictAlgorithm: ConflictAlgorithm.replace);
+      batch.insert('food_cache', map,
+          conflictAlgorithm: ConflictAlgorithm.replace);
     }
     await batch.commit(noResult: true);
   }
 
-  /// Searches the food_cache for items whose name contains [query].
-  /// Only returns non-expired entries.
   static Future<List<FoodItem>> searchCachedFoods(String query) async {
     final db = await database;
     final cutoff = DateTime.now().millisecondsSinceEpoch - _cacheTtlMs;
-    final rows = await db.query(
-      'food_cache',
-      where: 'name LIKE ? AND cached_at > ?',
-      whereArgs: ['%$query%', cutoff],
-      limit: 20,
-    );
+    final rows = await db.query('food_cache',
+        where: 'name LIKE ? AND cached_at > ?',
+        whereArgs: ['%$query%', cutoff],
+        limit: 20);
     return rows.map(FoodItem.fromMap).toList();
   }
 }
