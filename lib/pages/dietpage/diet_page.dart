@@ -27,17 +27,26 @@ class _DietPageState extends State<DietPage> {
   static const _calculatorFields = [
     (label: 'Height (CM)', max: 300),
     (label: 'Weight (KG)', max: 500),
-    (label: 'Age', max: 120),
-    (label: 'Activity', max: 5),
+    (label: 'Age',         max: 120),
+    (label: 'Activity',    max: 5),
   ];
 
   final List<int> _values = [0, 0, 0, 0];
+  final List<int> _values2 = [0, 0, 0, 0];
 
   int get _calories => CalorieCalculator.calculate(
-        heightCm: _values[0],
-        weightKg: _values[1],
-        age: _values[2],
+        heightCm:      _values[0],
+        weightKg:      _values[1],
+        age:           _values[2],
         activityLevel: _values[3],
+      );
+
+  // ignore: unused_element
+  int get _calories2 => CalorieCalculator.calculate(
+        heightCm:      _values2[0],
+        weightKg:      _values2[1],
+        age:           _values2[2],
+        activityLevel: _values2[3],
       );
 
   @override
@@ -48,8 +57,7 @@ class _DietPageState extends State<DietPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Diet Plan',
-                style: Theme.of(context).textTheme.headlineMedium),
+            Text('Diet Plan', style: Theme.of(context).textTheme.headlineMedium),
             const SizedBox(height: 16),
             _MealGrid(meals: _meals),
             const SizedBox(height: 16),
@@ -67,11 +75,18 @@ class _DietPageState extends State<DietPage> {
   }
 }
 
-// ── Goal preset grid (unchanged) ──────────────────────────────────────────────
+// ── Goal preset grid — stateful, highlights the selected plan ─────────────────
 
-class _MealGrid extends StatelessWidget {
+class _MealGrid extends StatefulWidget {
   final List<String> meals;
   const _MealGrid({required this.meals});
+
+  @override
+  State<_MealGrid> createState() => _MealGridState();
+}
+
+class _MealGridState extends State<_MealGrid> {
+  int _selected = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -84,18 +99,28 @@ class _MealGrid extends StatelessWidget {
         mainAxisSpacing: 12,
         mainAxisExtent: 60,
       ),
-      itemCount: meals.length,
-      itemBuilder: (context, index) => Card(
-        child: Center(
-          child:
-              Text(meals[index], style: Theme.of(context).textTheme.titleMedium),
-        ),
-      ),
+      itemCount: widget.meals.length,
+      itemBuilder: (context, index) {
+        final isSelected = _selected == index;
+        return FilledButton.tonal(
+          onPressed: () => setState(() => _selected = index),
+          style: isSelected
+              ? FilledButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                )
+              : FilledButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+          child: Text(widget.meals[index]),
+        );
+      },
     );
   }
 }
 
-// ── TDEE calculator spinner grid (unchanged) ──────────────────────────────────
+// ── TDEE calculator spinner grid ──────────────────────────────────────────────
 
 class _CalculatorGrid extends StatelessWidget {
   final List<({String label, int max})> fields;
@@ -123,7 +148,7 @@ class _CalculatorGrid extends StatelessWidget {
   }
 }
 
-// ── TDEE display card (unchanged) ─────────────────────────────────────────────
+// ── TDEE display card ─────────────────────────────────────────────────────────
 
 class _CalorieCard extends StatelessWidget {
   final int calories;
@@ -145,7 +170,7 @@ class _CalorieCard extends StatelessWidget {
   }
 }
 
-// ── Macro target sliders (unchanged) ─────────────────────────────────────────
+// ── Macro target sliders ──────────────────────────────────────────────────────
 
 class _TargetSliders extends StatefulWidget {
   const _TargetSliders();
@@ -160,34 +185,29 @@ class _TargetSlidersState extends State<_TargetSliders> {
 
   @override
   Widget build(BuildContext context) {
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 1,
-        crossAxisSpacing: 8,
-        mainAxisSpacing: 0,
-        mainAxisExtent: 100,
-      ),
-      itemCount: 3,
-      itemBuilder: (context, index) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(_macroNames[index],
-              style: Theme.of(context).textTheme.bodyLarge),
-          Slider(
-            value: _macros[index],
-            label: _macroNames[index],
-            max: 100,
-            onChanged: (val) => setState(() => _macros[index] = val),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (int index = 0; index < _macroNames.length; index++)
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(_macroNames[index],
+                  style: Theme.of(context).textTheme.bodyLarge),
+              Slider(
+                value: _macros[index],
+                label: _macroNames[index],
+                max: 100,
+                onChanged: (val) => setState(() => _macros[index] = val),
+              ),
+            ],
           ),
-        ],
-      ),
+      ],
     );
   }
 }
 
-// ── Meal plan section — now loads food bank + shows macro chips + SmartSwap ───
+// ── Meal plan — loads from DB, shows macro chips + Smart Swap ─────────────────
 
 class _MealPlan extends StatefulWidget {
   const _MealPlan();
@@ -197,7 +217,6 @@ class _MealPlan extends StatefulWidget {
 }
 
 class _MealPlanState extends State<_MealPlan> {
-  /// Loads both the user's meals and the full food bank concurrently.
   late final Future<(List<Meal>, List<FoodItem>)> _data = _loadData();
 
   static Future<(List<Meal>, List<FoodItem>)> _loadData() async {
@@ -222,29 +241,21 @@ class _MealPlanState extends State<_MealPlan> {
 
         final (meals, foodBank) = snapshot.data!;
 
-        return ListView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: meals.length,
-          itemBuilder: (context, index) {
-            final meal = meals[index];
-            // Build a synthetic FoodItem from the meal so the algorithm
-            // can work on it. All values are per-meal totals (not per 100g).
-            final mealAsFood = _mealToFoodItem(meal);
-            return _MealCard(
-              meal: meal,
-              mealAsFood: mealAsFood,
-              foodBank: foodBank,
-              mealSlot: meal.mealSlot,
-            );
-          },
+        return Column(
+          children: [
+            for (final meal in meals)
+              _MealCard(
+                meal: meal,
+                mealAsFood: _mealToFoodItem(meal),
+                foodBank: foodBank,
+                mealSlot: meal.mealSlot,
+              ),
+          ],
         );
       },
     );
   }
 
-  /// Converts a [Meal] into a [FoodItem] so the proximity algorithm can run.
-  /// Values are meal totals — the algorithm's normalisation handles the scale.
   static FoodItem _mealToFoodItem(Meal meal) => FoodItem(
         id: 'meal_${meal.id ?? meal.name}',
         name: meal.name,
@@ -260,7 +271,8 @@ class _MealPlanState extends State<_MealPlan> {
       );
 }
 
-/// A single meal card with macro chips and an optional Smart Swap panel.
+// ── Single meal card ──────────────────────────────────────────────────────────
+
 class _MealCard extends StatelessWidget {
   final Meal meal;
   final FoodItem mealAsFood;
@@ -276,8 +288,6 @@ class _MealCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Run algorithm to decide whether to show the swap panel header.
-    // The panel itself is lazy — it only shows suggestions when expanded.
     final hasSuggestions = mealAsFood.isUnhealthy &&
         NutritionalProximityAlgorithm.findAlternatives(
           mealAsFood,
@@ -287,45 +297,32 @@ class _MealCard extends StatelessWidget {
         ).isNotEmpty;
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 10),
       child: Padding(
-        padding: const EdgeInsets.all(12.0),
+        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Meal name + calorie row ──────────────────────────────────
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(
-                  child: Text(
-                    meal.name,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
-                Text(
-                  '${meal.calories} kcal',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
+                Text(meal.name,
+                    style: Theme.of(context).textTheme.bodyMedium),
+                Text('${meal.calories} kcal',
+                    style: Theme.of(context).textTheme.bodySmall),
               ],
             ),
             const SizedBox(height: 3),
-
-            // ── Description ───────────────────────────────────────────────
-            Text(
-              meal.description,
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
+            Text(meal.description,
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
             const SizedBox(height: 6),
-
-            // ── Macro chips (NEW) ─────────────────────────────────────────
             MacroChipRow(
               proteinG: meal.proteinG,
               fatG: meal.fatG,
               carbsG: meal.carbsG,
             ),
-
-            // ── Smart Swap panel (only shown when flagged + has suggestions) ─
             if (hasSuggestions)
               SmartSwapPanel(
                 food: mealAsFood,
@@ -339,19 +336,21 @@ class _MealCard extends StatelessWidget {
   }
 }
 
-// ── Row container: sliders left, meal plan right (unchanged layout) ───────────
+// ── Side-by-side: sliders left, meal plan right ───────────────────────────────
 
 class _TargetMealPlan extends StatelessWidget {
   const _TargetMealPlan();
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: const [
-        Expanded(child: _TargetSliders()),
-        Expanded(child: _MealPlan()),
-      ],
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: const [
+          Expanded(child: _TargetSliders()),
+          Expanded(child: _MealPlan()),
+        ],
+      ),
     );
   }
 }
