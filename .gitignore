@@ -47,6 +47,9 @@ app.*.map.json
 # Claude MD File (if using)
 /CLAUDE.md
 
+# API keys — each developer creates their own copy from CLAUDE.md instructions
+lib/config/api_config.dart
+
 # IntelliJ Idea related extras
 .idea/misc.xml
 
