@@ -63,6 +63,8 @@ class _SplashScreenState extends State<_SplashScreen> {
     ]);
     // Ensure the single app user exists (idempotent).
     await DbHelper.getUser();
+    // Seed placeholder food log on first run (no-op if data already exists).
+    await DbHelper.seedPlaceholderFoodLogIfEmpty();
     if (mounted) {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const MainShell()),

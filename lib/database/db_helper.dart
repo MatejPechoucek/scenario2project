@@ -13,6 +13,7 @@ import 'meal.dart';
 ///   v2 — macro/micro columns added to meals; food_cache table added
 ///   v3 — meal_slot column added to meals
 ///   v4 — app_user table added; food_log table added
+///   v5 — calculator inputs + weeklyLossKg added to app_user
 class DbHelper {
   static Database? _db;
 
@@ -27,7 +28,7 @@ class DbHelper {
     final path = join(await getDatabasesPath(), 'diet_plan.db');
     return openDatabase(
       path,
-      version: 4,
+      version: 5,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -41,6 +42,7 @@ class DbHelper {
     await _createFoodLogTable(db);
     await _seedMeals(db);
     await _seedUser(db);
+    await _seedFoodLog(db);
   }
 
   /// Called when the existing database version < current version.
@@ -73,6 +75,18 @@ class DbHelper {
       await _createAppUserTable(db);
       await _createFoodLogTable(db);
       await _seedUser(db);
+      await _seedFoodLog(db);
+    }
+    if (oldVersion < 5) {
+      for (final sql in [
+        'ALTER TABLE app_user ADD COLUMN height_cm INTEGER DEFAULT 0',
+        'ALTER TABLE app_user ADD COLUMN weight_kg INTEGER DEFAULT 0',
+        'ALTER TABLE app_user ADD COLUMN age INTEGER DEFAULT 0',
+        'ALTER TABLE app_user ADD COLUMN activity_level INTEGER DEFAULT 0',
+        'ALTER TABLE app_user ADD COLUMN weekly_loss_kg REAL DEFAULT 0',
+      ]) {
+        await db.execute(sql);
+      }
     }
   }
 
@@ -123,7 +137,12 @@ class DbHelper {
         daily_calorie_goal  INTEGER NOT NULL DEFAULT 2000,
         protein_g_goal      REAL NOT NULL DEFAULT 150,
         fat_g_goal          REAL NOT NULL DEFAULT 65,
-        carbs_g_goal        REAL NOT NULL DEFAULT 250
+        carbs_g_goal        REAL NOT NULL DEFAULT 250,
+        height_cm           INTEGER NOT NULL DEFAULT 0,
+        weight_kg           INTEGER NOT NULL DEFAULT 0,
+        age                 INTEGER NOT NULL DEFAULT 0,
+        activity_level      INTEGER NOT NULL DEFAULT 0,
+        weekly_loss_kg      REAL NOT NULL DEFAULT 0
       )
     ''');
   }
@@ -204,6 +223,138 @@ class DbHelper {
         (id, name, daily_calorie_goal, protein_g_goal, fat_g_goal, carbs_g_goal)
       VALUES (1, 'User', 2000, 150.0, 65.0, 250.0)
     ''');
+  }
+
+  /// Public entry-point for startup seeding — called from main.dart after
+  /// migrations, so it works on both fresh installs and existing v4 DBs.
+  static Future<void> seedPlaceholderFoodLogIfEmpty() async {
+    final db = await database;
+    await _seedFoodLog(db);
+  }
+
+  /// Seeds 7 days of realistic placeholder food log entries.
+  /// Only runs if the food_log table is completely empty.
+  static Future<void> _seedFoodLog(Database db) async {
+    final existing = await db.rawQuery('SELECT COUNT(*) as c FROM food_log');
+    if ((existing.first['c'] as int) > 0) return;
+
+    final now = DateTime.now();
+
+    // Helper to build a date string N days ago.
+    String date(int daysAgo) {
+      final d = now.subtract(Duration(days: daysAgo));
+      return '${d.year}-'
+          '${d.month.toString().padLeft(2, '0')}-'
+          '${d.day.toString().padLeft(2, '0')}';
+    }
+
+    // Each entry: (food_item_id, food_name, category, serving_g,
+    //              calories, protein_g, fat_g, carbs_g, sugar_g,
+    //              sodium_mg, fiber_g, meal_slot, logged_date, logged_at)
+    final entries = <Map<String, Object?>>[
+      // ── 6 days ago ──────────────────────────────────────────────────────
+      _logRow('local_001', 'Porridge (Oats)',      'Breakfast Cereals', 250, 335, 11, 6.5, 59, 1.0, 18, 4.0, 'breakfast', date(6), now, -6, 0),
+      _logRow('local_002', 'Chicken Breast',       'Poultry',           180, 297, 55, 4.0, 0,  0.0, 180, 0.0,'lunch',     date(6), now, -6, 1),
+      _logRow('local_003', 'Brown Rice (cooked)',  'Grains',            160, 210, 4.4, 1.8, 44, 0.4, 8, 1.8, 'lunch',     date(6), now, -6, 2),
+      _logRow('local_004', 'Broccoli (steamed)',   'Vegetables',        100, 35,  2.8, 0.4, 6,  1.5, 40, 2.6,'lunch',     date(6), now, -6, 3),
+      _logRow('local_005', 'Salmon Fillet',        'Fish & Seafood',    200, 412, 40,  26,  0,  0.0, 120, 0.0,'dinner',    date(6), now, -6, 4),
+      _logRow('local_006', 'Sweet Potato (baked)', 'Vegetables',        150, 129, 2.3, 0.2, 30, 6.0, 56, 3.8,'dinner',    date(6), now, -6, 5),
+
+      // ── 5 days ago ──────────────────────────────────────────────────────
+      _logRow('local_007', 'Scrambled Eggs',       'Eggs & Dairy',      120, 192, 14,  14,  1.2,  1.0, 300, 0.0,'breakfast', date(5), now, -5, 0),
+      _logRow('local_008', 'Wholegrain Toast',     'Bread & Bakery',    60,  138, 5.0, 1.4, 27,  2.0, 200, 3.2,'breakfast', date(5), now, -5, 1),
+      _logRow('local_009', 'Tuna (in water)',      'Fish & Seafood',    130, 130, 29,  1.0, 0,   0.0, 330, 0.0,'lunch',     date(5), now, -5, 2),
+      _logRow('local_010', 'Mixed Salad Leaves',  'Salads',            80,  14,  1.2, 0.2, 2.4, 0.8, 28, 1.4, 'lunch',     date(5), now, -5, 3),
+      _logRow('local_011', 'Beef Stir Fry',        'Red Meat',          200, 380, 32,  22,  8,   4.0, 640, 2.0,'dinner',    date(5), now, -5, 4),
+      _logRow('local_012', 'Egg Noodles (cooked)', 'Grains',            150, 206, 7.2, 2.3, 40,  1.5, 18, 1.5, 'dinner',    date(5), now, -5, 5),
+      _logRow('local_013', 'Apple',                'Fruits',            150, 78,  0.4, 0.2, 20,  14,  1.5, 2.6,'snack',     date(5), now, -5, 6),
+
+      // ── 4 days ago ──────────────────────────────────────────────────────
+      _logRow('local_014', 'Greek Yogurt (plain)', 'Eggs & Dairy',      200, 116, 10,  5.0, 3.8, 3.8, 80, 0.0,'breakfast', date(4), now, -4, 0),
+      _logRow('local_015', 'Mixed Berries',        'Fruits',            100, 57,  0.8, 0.5, 14,  9.0, 2.0, 2.0,'breakfast', date(4), now, -4, 1),
+      _logRow('local_016', 'Lentil Soup',          'Legumes',           350, 280, 18,  3.5, 45,  6.0, 480, 9.5,'lunch',     date(4), now, -4, 2),
+      _logRow('local_017', 'Wholegrain Bread',     'Bread & Bakery',    60,  145, 5.5, 1.8, 27,  2.0, 240, 3.5,'lunch',     date(4), now, -4, 3),
+      _logRow('local_018', 'Grilled Salmon',       'Fish & Seafood',    180, 371, 36,  24,  0,   0.0, 108, 0.0,'dinner',    date(4), now, -4, 4),
+      _logRow('local_019', 'Asparagus (grilled)',  'Vegetables',        120, 26,  2.9, 0.2, 5,   2.0, 4,  2.4, 'dinner',    date(4), now, -4, 5),
+      _logRow('local_020', 'Almonds',              'Nuts & Seeds',      30,  174, 6.3, 15,  5.8, 1.0, 1.2, 2.1,'snack',     date(4), now, -4, 6),
+
+      // ── 3 days ago ──────────────────────────────────────────────────────
+      _logRow('local_021', 'Banana Smoothie',      'Beverages',         350, 263, 4.2, 1.4, 62,  42,  56, 2.4,'breakfast', date(3), now, -3, 0),
+      _logRow('local_022', 'Caesar Salad',         'Salads',            280, 364, 12,  28,  14,  4.0, 680, 2.0,'lunch',     date(3), now, -3, 1),
+      _logRow('local_023', 'Chicken Curry',        'Meals',             300, 420, 28,  18,  24,  6.0, 720, 3.0,'dinner',    date(3), now, -3, 2),
+      _logRow('local_024', 'Basmati Rice (cooked)','Grains',            180, 234, 5.0, 0.5, 52,  0.2, 4,  0.5, 'dinner',    date(3), now, -3, 3),
+      _logRow('local_025', 'Dark Chocolate (70%)', 'Desserts',          30,  161, 2.1, 12,  16,  12,  6.0, 2.7,'snack',     date(3), now, -3, 4),
+
+      // ── 2 days ago ──────────────────────────────────────────────────────
+      _logRow('local_026', 'Avocado Toast',        'Bread & Bakery',    180, 368, 7.8, 22,  33,  2.4, 340, 7.2,'breakfast', date(2), now, -2, 0),
+      _logRow('local_027', 'Turkey Wrap',          'Processed Meat',    220, 420, 30,  12,  42,  4.0, 820, 3.5,'lunch',     date(2), now, -2, 1),
+      _logRow('local_028', 'Margherita Pizza',     'Fast Food',         300, 690, 24,  24,  87,  9.0, 1260,4.5,'dinner',    date(2), now, -2, 2),
+      _logRow('local_029', 'Protein Bar',          'Supplements',       60,  228, 20,  8.0, 26,  10,  120, 4.0,'snack',     date(2), now, -2, 3),
+
+      // ── Yesterday ────────────────────────────────────────────────────────
+      _logRow('local_030', 'Pancakes (2 medium)',  'Bread & Bakery',    160, 366, 9.6, 14,  52,  12,  440, 1.6,'breakfast', date(1), now, -1, 0),
+      _logRow('local_031', 'Maple Syrup',          'Condiments',        20,  52,  0.0, 0.0, 13,  13,  0.8, 0.0,'breakfast', date(1), now, -1, 1),
+      _logRow('local_032', 'Cheeseburger',         'Fast Food',         220, 550, 28,  30,  40,  6.0, 890, 2.0,'lunch',     date(1), now, -1, 2),
+      _logRow('local_033', 'Sweet Potato Fries',   'Fast Food',         120, 192, 2.4, 8.4, 30,  4.0, 340, 3.0,'lunch',     date(1), now, -1, 3),
+      _logRow('local_034', 'Grilled Chicken',      'Poultry',           200, 330, 62,  8.0, 0,   0.0, 200, 0.0,'dinner',    date(1), now, -1, 4),
+      _logRow('local_035', 'Steamed Vegetables',   'Vegetables',        180, 63,  3.6, 0.5, 13,  5.0, 36, 4.2, 'dinner',    date(1), now, -1, 5),
+
+      // ── Today ────────────────────────────────────────────────────────────
+      _logRow('local_036', 'Oats with Honey',      'Breakfast Cereals', 200, 340, 9.0, 5.5, 62,  14,  20, 4.8,'breakfast', date(0), now, 0,  0),
+      _logRow('local_037', 'Orange Juice',         'Beverages',         200, 86,  1.4, 0.2, 20,  18,  4.0, 0.4,'breakfast', date(0), now, 0,  1),
+      _logRow('local_038', 'Tuna Salad',           'Fish & Seafood',    250, 310, 36,  10,  14,  3.0, 420, 3.2,'lunch',     date(0), now, 0,  2),
+    ];
+
+    final batch = db.batch();
+    for (final e in entries) {
+      batch.insert('food_log', e);
+    }
+    await batch.commit(noResult: true);
+  }
+
+  /// Builds a food_log row map from individual fields.
+  static Map<String, Object?> _logRow(
+    String id,
+    String name,
+    String category,
+    double servingG,
+    double calories,
+    double proteinG,
+    double fatG,
+    double carbsG,
+    double sugarG,
+    double sodiumMg,
+    double fiberG,
+    String mealSlot,
+    String loggedDate,
+    DateTime baseTime,
+    int dayOffset,
+    int sequence,
+  ) {
+    // Spread entries across the day: breakfast ~7am, lunch ~12pm, dinner ~7pm, snack ~3pm.
+    const slotHours = {'breakfast': 7, 'lunch': 12, 'dinner': 19, 'snack': 15};
+    final hour = slotHours[mealSlot] ?? 12;
+    final ts = DateTime(
+      baseTime.year, baseTime.month, baseTime.day,
+      hour, sequence * 3, // offset by minutes so ordering is stable
+    ).subtract(Duration(days: -dayOffset)).millisecondsSinceEpoch;
+
+    return {
+      'food_item_id': id,
+      'food_name': name,
+      'category': category,
+      'serving_g': servingG,
+      'calories': calories,
+      'protein_g': proteinG,
+      'fat_g': fatG,
+      'carbs_g': carbsG,
+      'sugar_g': sugarG,
+      'sodium_mg': sodiumMg,
+      'fiber_g': fiberG,
+      'meal_slot': mealSlot,
+      'logged_date': loggedDate,
+      'logged_at': ts,
+    };
   }
 
   static Future<void> _backfillMealNutrition(Database db) async {

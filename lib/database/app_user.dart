@@ -1,14 +1,11 @@
 /// Represents the single local user profile for CleanEater.
 ///
 /// There is always exactly one row in the `app_user` table (id = 1).
-/// This acts as a lightweight user system without authentication —
-/// suitable for a prototype where all data is local.
 class AppUser {
   final int id;
   final String name;
 
-  /// Daily calorie target in kcal. Updated when the user calculates TDEE
-  /// on the Diet Plan page, or manually on the Profile page.
+  /// Daily calorie target in kcal — TDEE minus any weight-loss deficit.
   final int dailyCalorieGoal;
 
   // ── Daily macro goals (grams) ─────────────────────────────────────────────
@@ -17,6 +14,17 @@ class AppUser {
   final double fatGGoal;
   final double carbsGGoal;
 
+  // ── TDEE calculator inputs (persisted so the page restores them) ──────────
+
+  final int heightCm;
+  final int weightKg;
+  final int age;
+  final int activityLevel;
+
+  /// Weekly weight-loss target in kg (0 = maintain).
+  /// Used to compute the calorie deficit: deficit = weeklyLossKg × 7700 / 7.
+  final double weeklyLossKg;
+
   const AppUser({
     this.id = 1,
     this.name = 'User',
@@ -24,7 +32,16 @@ class AppUser {
     this.proteinGGoal = 150.0,
     this.fatGGoal = 65.0,
     this.carbsGGoal = 250.0,
+    this.heightCm = 0,
+    this.weightKg = 0,
+    this.age = 0,
+    this.activityLevel = 0,
+    this.weeklyLossKg = 0.0,
   });
+
+  /// Daily calorie deficit derived from [weeklyLossKg].
+  /// 1 kg of body fat ≈ 7700 kcal; spread over 7 days.
+  int get dailyDeficit => (weeklyLossKg * 7700 / 7).round();
 
   AppUser copyWith({
     String? name,
@@ -32,6 +49,11 @@ class AppUser {
     double? proteinGGoal,
     double? fatGGoal,
     double? carbsGGoal,
+    int? heightCm,
+    int? weightKg,
+    int? age,
+    int? activityLevel,
+    double? weeklyLossKg,
   }) =>
       AppUser(
         id: id,
@@ -40,6 +62,11 @@ class AppUser {
         proteinGGoal: proteinGGoal ?? this.proteinGGoal,
         fatGGoal: fatGGoal ?? this.fatGGoal,
         carbsGGoal: carbsGGoal ?? this.carbsGGoal,
+        heightCm: heightCm ?? this.heightCm,
+        weightKg: weightKg ?? this.weightKg,
+        age: age ?? this.age,
+        activityLevel: activityLevel ?? this.activityLevel,
+        weeklyLossKg: weeklyLossKg ?? this.weeklyLossKg,
       );
 
   Map<String, Object?> toMap() => {
@@ -49,6 +76,11 @@ class AppUser {
         'protein_g_goal': proteinGGoal,
         'fat_g_goal': fatGGoal,
         'carbs_g_goal': carbsGGoal,
+        'height_cm': heightCm,
+        'weight_kg': weightKg,
+        'age': age,
+        'activity_level': activityLevel,
+        'weekly_loss_kg': weeklyLossKg,
       };
 
   factory AppUser.fromMap(Map<String, Object?> map) => AppUser(
@@ -58,5 +90,10 @@ class AppUser {
         proteinGGoal: (map['protein_g_goal'] as num).toDouble(),
         fatGGoal: (map['fat_g_goal'] as num).toDouble(),
         carbsGGoal: (map['carbs_g_goal'] as num).toDouble(),
+        heightCm: (map['height_cm'] as int?) ?? 0,
+        weightKg: (map['weight_kg'] as int?) ?? 0,
+        age: (map['age'] as int?) ?? 0,
+        activityLevel: (map['activity_level'] as int?) ?? 0,
+        weeklyLossKg: (map['weekly_loss_kg'] as num?)?.toDouble() ?? 0.0,
       );
 }

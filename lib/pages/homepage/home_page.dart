@@ -1,3 +1,4 @@
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
 import '../../database/app_user.dart';
@@ -7,8 +8,8 @@ import '../foodsearch/food_search_page.dart';
 
 /// The main daily food tracker page.
 ///
-/// Shows today's food log grouped by meal slot, a calorie progress bar,
-/// and macro summaries. The floating action button opens the food search
+/// Shows today's food log grouped by meal slot, a calorie donut chart,
+/// and macro ring charts. The floating action button opens the food search
 /// page so the user can log what they ate.
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -18,7 +19,6 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  // The date currently being viewed ('YYYY-MM-DD').
   late String _viewDate;
   late DateTime _viewDay;
 
@@ -87,14 +87,12 @@ class _HomePageState extends State<HomePage> {
 
   // ── Derived totals ─────────────────────────────────────────────────────────
 
-  double get _totalCalories =>
-      _log.fold(0.0, (sum, e) => sum + e.calories);
-  double get _totalProtein =>
-      _log.fold(0.0, (sum, e) => sum + e.proteinG);
-  double get _totalFat =>
-      _log.fold(0.0, (sum, e) => sum + e.fatG);
-  double get _totalCarbs =>
-      _log.fold(0.0, (sum, e) => sum + e.carbsG);
+  double get _totalCalories => _log.fold(0.0, (s, e) => s + e.calories);
+  double get _totalProtein  => _log.fold(0.0, (s, e) => s + e.proteinG);
+  double get _totalFat      => _log.fold(0.0, (s, e) => s + e.fatG);
+  double get _totalCarbs    => _log.fold(0.0, (s, e) => s + e.carbsG);
+
+  // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -108,26 +106,18 @@ class _HomePageState extends State<HomePage> {
               onRefresh: _load,
               child: CustomScrollView(
                 slivers: [
-                  // ── Date header ────────────────────────────────────────────
                   SliverToBoxAdapter(child: _buildDateHeader(theme)),
 
-                  // ── Calorie summary card ───────────────────────────────────
-                  if (user != null)
+                  if (user != null) ...[
+                    // Calorie donut + macro rings in one row
                     SliverToBoxAdapter(
-                      child: _buildCalorieSummary(theme, user),
+                      child: _buildSummaryRow(theme, user),
                     ),
+                  ],
 
-                  // ── Macro breakdown ────────────────────────────────────────
-                  if (user != null)
-                    SliverToBoxAdapter(
-                      child: _buildMacroRow(theme, user),
-                    ),
-
-                  // ── Meal sections ──────────────────────────────────────────
                   for (final slot in _kSlots)
                     ..._buildMealSection(theme, slot),
 
-                  // ── Bottom padding for FAB ─────────────────────────────────
                   const SliverToBoxAdapter(child: SizedBox(height: 80)),
                 ],
               ),
@@ -155,12 +145,12 @@ class _HomePageState extends State<HomePage> {
           IconButton(
             icon: const Icon(Icons.chevron_left),
             onPressed: () => _goToDay(-1),
-            tooltip: 'Previous day',
           ),
           Column(
             children: [
-              Text(label, style: theme.textTheme.titleLarge
-                  ?.copyWith(fontWeight: FontWeight.bold)),
+              Text(label,
+                  style: theme.textTheme.titleLarge
+                      ?.copyWith(fontWeight: FontWeight.bold)),
               if (!_isToday)
                 Text(
                   '${_viewDay.day} ${_kMonths[_viewDay.month - 1]} ${_viewDay.year}',
@@ -173,20 +163,18 @@ class _HomePageState extends State<HomePage> {
           IconButton(
             icon: const Icon(Icons.chevron_right),
             onPressed: _isToday ? null : () => _goToDay(1),
-            tooltip: 'Next day',
           ),
         ],
       ),
     );
   }
 
-  // ── Calorie summary card ───────────────────────────────────────────────────
+  // ── Summary row: calorie donut (left) + 3 macro rings (right) ─────────────
 
-  Widget _buildCalorieSummary(ThemeData theme, AppUser user) {
+  Widget _buildSummaryRow(ThemeData theme, AppUser user) {
     final consumed = _totalCalories;
     final goal = user.dailyCalorieGoal.toDouble();
     final remaining = (goal - consumed).clamp(0.0, double.infinity);
-    final progress = (consumed / goal).clamp(0.0, 1.0);
     final overGoal = consumed > goal;
 
     return Padding(
@@ -196,120 +184,62 @@ class _HomePageState extends State<HomePage> {
         color: theme.colorScheme.primaryContainer,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          padding: const EdgeInsets.all(16),
+          child: Row(
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Calories',
-                          style: theme.textTheme.labelLarge?.copyWith(
-                            color: theme.colorScheme.onPrimaryContainer,
-                          )),
-                      const SizedBox(height: 4),
-                      RichText(
-                        text: TextSpan(
-                          children: [
-                            TextSpan(
-                              text: consumed.toStringAsFixed(0),
-                              style: theme.textTheme.headlineMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: overGoal
-                                    ? theme.colorScheme.tertiary
-                                    : theme.colorScheme.onPrimaryContainer,
-                              ),
-                            ),
-                            TextSpan(
-                              text: ' / ${goal.toStringAsFixed(0)} kcal',
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: theme.colorScheme.onPrimaryContainer
-                                    .withValues(alpha: 0.7),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        overGoal ? 'Over goal' : 'Remaining',
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: theme.colorScheme.onPrimaryContainer
-                              .withValues(alpha: 0.7),
-                        ),
-                      ),
-                      Text(
-                        overGoal
-                            ? '+${(consumed - goal).toStringAsFixed(0)} kcal'
-                            : '${remaining.toStringAsFixed(0)} kcal',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: overGoal
-                              ? theme.colorScheme.tertiary
-                              : theme.colorScheme.onPrimaryContainer,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+              // ── Calorie donut ──────────────────────────────────────────────
+              _CalorieDonut(
+                consumed: consumed,
+                goal: goal,
+                remaining: remaining,
+                overGoal: overGoal,
+                theme: theme,
               ),
-              const SizedBox(height: 12),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: LinearProgressIndicator(
-                  value: progress,
-                  minHeight: 8,
-                  backgroundColor:
-                      theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.15),
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    overGoal
-                        ? theme.colorScheme.tertiary
-                        : theme.colorScheme.onPrimaryContainer,
-                  ),
+
+              const SizedBox(width: 16),
+
+              // ── Three macro rings ──────────────────────────────────────────
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Macros',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: theme.colorScheme.onPrimaryContainer,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        _MacroRing(
+                          label: 'Protein',
+                          consumed: _totalProtein,
+                          goal: user.proteinGGoal,
+                          color: Colors.blue.shade500,
+                        ),
+                        _MacroRing(
+                          label: 'Fat',
+                          consumed: _totalFat,
+                          goal: user.fatGGoal,
+                          color: Colors.orange.shade500,
+                        ),
+                        _MacroRing(
+                          label: 'Carbs',
+                          consumed: _totalCarbs,
+                          goal: user.carbsGGoal,
+                          color: Colors.green.shade500,
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  // ── Macro breakdown row ────────────────────────────────────────────────────
-
-  Widget _buildMacroRow(ThemeData theme, AppUser user) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-      child: Row(
-        children: [
-          _MacroBar(
-            label: 'Protein',
-            consumed: _totalProtein,
-            goal: user.proteinGGoal,
-            color: Colors.blue.shade600,
-          ),
-          const SizedBox(width: 8),
-          _MacroBar(
-            label: 'Fat',
-            consumed: _totalFat,
-            goal: user.fatGGoal,
-            color: Colors.orange.shade600,
-          ),
-          const SizedBox(width: 8),
-          _MacroBar(
-            label: 'Carbs',
-            consumed: _totalCarbs,
-            goal: user.carbsGGoal,
-            color: Colors.green.shade600,
-          ),
-        ],
       ),
     );
   }
@@ -370,6 +300,190 @@ class _HomePageState extends State<HomePage> {
     'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
   ];
+}
+
+// ── Calorie donut chart ────────────────────────────────────────────────────────
+
+class _CalorieDonut extends StatelessWidget {
+  final double consumed;
+  final double goal;
+  final double remaining;
+  final bool overGoal;
+  final ThemeData theme;
+
+  const _CalorieDonut({
+    required this.consumed,
+    required this.goal,
+    required this.remaining,
+    required this.overGoal,
+    required this.theme,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = theme.colorScheme;
+    final consumedPct = goal > 0 ? (consumed / goal).clamp(0.0, 1.0) : 0.0;
+    final remainingPct = (1.0 - consumedPct).clamp(0.001, 1.0);
+
+    final activeColor = overGoal ? cs.tertiary : cs.primary;
+    final bgColor = cs.onPrimaryContainer.withValues(alpha: 0.12);
+
+    return Column(
+      children: [
+        SizedBox(
+          width: 120,
+          height: 120,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              PieChart(
+                PieChartData(
+                  sections: [
+                    PieChartSectionData(
+                      value: consumedPct.clamp(0.001, 1.0),
+                      color: activeColor,
+                      title: '',
+                      radius: 18,
+                      borderSide: BorderSide.none,
+                    ),
+                    PieChartSectionData(
+                      value: remainingPct,
+                      color: bgColor,
+                      title: '',
+                      radius: 18,
+                      borderSide: BorderSide.none,
+                    ),
+                  ],
+                  centerSpaceRadius: 42,
+                  sectionsSpace: 2,
+                  startDegreeOffset: -90,
+                ),
+              ),
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    consumed.toStringAsFixed(0),
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: cs.onPrimaryContainer,
+                    ),
+                  ),
+                  Text(
+                    'kcal',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: cs.onPrimaryContainer.withValues(alpha: 0.7),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 4),
+        // Remaining / Over label below the ring
+        Text(
+          overGoal
+              ? '+${(consumed - goal).toStringAsFixed(0)} over'
+              : '${remaining.toStringAsFixed(0)} left',
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: overGoal
+                ? theme.colorScheme.tertiary
+                : theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        Text(
+          'of ${goal.toStringAsFixed(0)} kcal',
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.5),
+            fontSize: 10,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Macro donut ring ───────────────────────────────────────────────────────────
+
+class _MacroRing extends StatelessWidget {
+  final String label;
+  final double consumed;
+  final double goal;
+  final Color color;
+
+  const _MacroRing({
+    required this.label,
+    required this.consumed,
+    required this.goal,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final progress = goal > 0 ? (consumed / goal).clamp(0.0, 1.0) : 0.0;
+    final remaining = (1.0 - progress).clamp(0.001, 1.0);
+    final over = consumed > goal;
+
+    return Column(
+      children: [
+        SizedBox(
+          width: 64,
+          height: 64,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              PieChart(
+                PieChartData(
+                  sections: [
+                    PieChartSectionData(
+                      value: progress.clamp(0.001, 1.0),
+                      color: over ? theme.colorScheme.tertiary : color,
+                      title: '',
+                      radius: 10,
+                      borderSide: BorderSide.none,
+                    ),
+                    PieChartSectionData(
+                      value: remaining,
+                      color: color.withValues(alpha: 0.15),
+                      title: '',
+                      radius: 10,
+                      borderSide: BorderSide.none,
+                    ),
+                  ],
+                  centerSpaceRadius: 22,
+                  sectionsSpace: 2,
+                  startDegreeOffset: -90,
+                ),
+              ),
+              Text(
+                '${consumed.toStringAsFixed(0)}g',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 10,
+                  color: theme.colorScheme.onPrimaryContainer,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(label,
+            style: theme.textTheme.labelSmall?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: theme.colorScheme.onPrimaryContainer,
+            )),
+        Text('of ${goal.toStringAsFixed(0)}g',
+            style: theme.textTheme.labelSmall?.copyWith(
+              fontSize: 9,
+              color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.5),
+            )),
+      ],
+    );
+  }
 }
 
 // ── Meal section header ────────────────────────────────────────────────────────
@@ -449,7 +563,7 @@ class _FoodLogTile extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         child: Row(
           children: [
-            const SizedBox(width: 28), // indent under icon
+            const SizedBox(width: 28),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -477,68 +591,6 @@ class _FoodLogTile extends StatelessWidget {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-// ── Macro progress bar ─────────────────────────────────────────────────────────
-
-class _MacroBar extends StatelessWidget {
-  final String label;
-  final double consumed;
-  final double goal;
-  final Color color;
-
-  const _MacroBar({
-    required this.label,
-    required this.consumed,
-    required this.goal,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final progress = goal > 0 ? (consumed / goal).clamp(0.0, 1.0) : 0.0;
-
-    return Expanded(
-      child: Card(
-        elevation: 0,
-        color: theme.colorScheme.surfaceContainerHighest,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: theme.textTheme.labelSmall),
-              const SizedBox(height: 4),
-              Text(
-                '${consumed.toStringAsFixed(1)}g',
-                style: theme.textTheme.labelLarge
-                    ?.copyWith(color: color, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 6),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: LinearProgressIndicator(
-                  value: progress,
-                  minHeight: 6,
-                  backgroundColor: color.withValues(alpha: 0.15),
-                  valueColor: AlwaysStoppedAnimation<Color>(color),
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                'of ${goal.toStringAsFixed(0)}g',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
         ),
       ),
     );
