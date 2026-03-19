@@ -110,6 +110,109 @@ class NutritionalProximityAlgorithm {
 
   // ── PUBLIC API ─────────────────────────────────────────────────────────────
 
+  /// Find the most nutritionally similar foods to [food] from [candidates].
+  ///
+  /// Unlike [findAlternatives], this method has no health gate — it works for
+  /// any food regardless of whether it is flagged as unhealthy. Category
+  /// compatibility is also skipped so that composed meals (which have no
+  /// direct category peers in the food bank) still return results.
+  ///
+  /// [macroTargets] — optional [protein, fat, carbs] slider weights (raw 0–100
+  /// values from the UI). When provided, each candidate is scored as a blend
+  /// of proximity to the current meal (60%) and alignment to the user's target
+  /// macro ratios (40%). If omitted, ranking is pure nutritional proximity.
+  ///
+  /// Results are sorted by ascending combined score (best first).
+  /// Each [SwapSuggestion] includes a neutral macro-delta label set so the UI
+  /// can show what differs between the original and the alternative.
+  static List<SwapSuggestion> findSimilar(
+    FoodItem food,
+    List<FoodItem> candidates, {
+    int maxResults = 5,
+    List<double>? macroTargets, // [proteinWeight, fatWeight, carbsWeight]
+  }) {
+    final eligible = candidates.where((c) => c.id != food.id).toList();
+    if (eligible.isEmpty) return [];
+
+    // Normalise macro targets to [0,1] ratios summing to 1.
+    List<double>? targetRatios;
+    if (macroTargets != null) {
+      final total = macroTargets.fold(0.0, (a, b) => a + b);
+      if (total > 0) {
+        targetRatios = macroTargets.map((v) => v / total).toList();
+      }
+    }
+
+    final pool = [...eligible, food];
+    final maxP  = _maxOf(pool, (f) => f.proteinG);
+    final maxF  = _maxOf(pool, (f) => f.fatG);
+    final maxC  = _maxOf(pool, (f) => f.carbsG);
+    final maxS  = _maxOf(pool, (f) => f.sugarG);
+    final maxNa = _maxOf(pool, (f) => f.sodiumMg);
+
+    final origVec = _normalise(food, maxP, maxF, maxC, maxS, maxNa);
+
+    final scored = <(double, FoodItem)>[];
+    for (final candidate in eligible) {
+      final candVec = _normalise(candidate, maxP, maxF, maxC, maxS, maxNa);
+      final proxScore = _weightedDistance(origVec, candVec);
+
+      double finalScore = proxScore;
+
+      if (targetRatios != null) {
+        // Macro ratio of the candidate (protein : fat : carbs).
+        final macroTotal =
+            candidate.proteinG + candidate.fatG + candidate.carbsG;
+        if (macroTotal > 0) {
+          final candP = candidate.proteinG / macroTotal;
+          final candF = candidate.fatG / macroTotal;
+          final candC = candidate.carbsG / macroTotal;
+          final alignScore = sqrt(
+            pow(candP - targetRatios[0], 2) +
+            pow(candF - targetRatios[1], 2) +
+            pow(candC - targetRatios[2], 2),
+          );
+          // 60% proximity to current meal, 40% alignment to target ratios.
+          finalScore = proxScore * 0.6 + alignScore * 0.4;
+        }
+      }
+
+      scored.add((finalScore, candidate));
+    }
+
+    scored.sort((a, b) => a.$1.compareTo(b.$1));
+
+    return scored.take(maxResults).map((e) {
+      final alt = e.$2;
+      return SwapSuggestion(
+        original: food,
+        alternative: alt,
+        distance: e.$1,
+        improvements: _macroDelta(food, alt),
+        reason: alt.category,
+      );
+    }).toList();
+  }
+
+  /// Neutral macro comparison labels (positive or negative) between two foods.
+  static List<String> _macroDelta(FoodItem orig, FoodItem cand) {
+    final result = <String>[];
+
+    void pct(double origVal, double candVal, String name) {
+      if (origVal <= 0 && candVal <= 0) return;
+      final base = origVal > 0 ? origVal : candVal;
+      final delta = ((candVal - origVal) / base * 100).round();
+      if (delta > 10) result.add('+$delta% $name');
+      if (delta < -10) result.add('$delta% $name');
+    }
+
+    pct(orig.proteinG, cand.proteinG, 'protein');
+    pct(orig.fatG,     cand.fatG,     'fat');
+    pct(orig.carbsG,   cand.carbsG,   'carbs');
+
+    return result;
+  }
+
   /// Find the best healthier alternatives for [food] from [candidates].
   ///
   /// [food]       — the food item to find alternatives for.
