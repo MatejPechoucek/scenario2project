@@ -55,11 +55,14 @@ class _SplashScreenState extends State<_SplashScreen> {
   }
 
   Future<void> _init() async {
-    // Run in parallel: load bundled JSON asset + warm up SQLite (migrations).
+    // Run in parallel: load bundled JSON asset + warm up SQLite (runs migrations,
+    // creates tables, seeds the default user if needed).
     await Future.wait([
       FoodRepository.initialize(),
       DbHelper.database,
     ]);
+    // Ensure the single app user exists (idempotent).
+    await DbHelper.getUser();
     if (mounted) {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const MainShell()),
