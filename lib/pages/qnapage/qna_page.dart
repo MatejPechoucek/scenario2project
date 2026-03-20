@@ -1,4 +1,28 @@
 import 'package:flutter/material.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
+
+// The barcode scanner doesn't work on Windows/IOS/Linux
+class BarcodeScannerPage extends StatelessWidget {
+  const BarcodeScannerPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Scan')),
+      body: MobileScanner(
+      onDetect: (capture) {
+        final barcode = capture.barcodes.first;
+        final code = barcode.rawValue;
+
+        if (code != null) {
+          Navigator.pop(context, code);
+        }
+      },
+      ),
+    );
+  }
+}
+
 
 class QnaPage extends StatefulWidget {
   const QnaPage({super.key});
@@ -46,6 +70,7 @@ class _QnaPageState extends State<QnaPage> {
               icon: Icons.fastfood,
               controller: foodSearchController,
               hint: "Search food (e.g. apple, pizza)...",
+              showScanner: true,
               onSubmit: () {
                 print("Food search: ${foodSearchController.text}");
               },
@@ -74,54 +99,65 @@ class _QnaPageState extends State<QnaPage> {
     );
   }
 
-  Widget _buildSection({
-    required String title,
-    required IconData icon,
-    required TextEditingController controller,
-    required String hint,
-    required VoidCallback onSubmit,
-  }) {
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 12),
-      elevation: 3,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                Icon(icon, color: Colors.deepPurple),
-                const SizedBox(width: 10),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              decoration: InputDecoration(
-                hintText: hint,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                suffixIcon: IconButton(
-                  icon: const Icon(Icons.search),
-                  onPressed: onSubmit,
-                ),
+Widget _buildSection({
+  required String title,
+  required IconData icon,
+  required TextEditingController controller,
+  required String hint,
+  required VoidCallback onSubmit,
+  bool showScanner = false,
+}) {
+  return Card(
+    margin: const EdgeInsets.symmetric(vertical: 12),
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: Colors.deepPurple),
+              const SizedBox(width: 10),
+              Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          TextField(
+            controller: controller,
+            decoration: InputDecoration(
+              hintText: hint,
+              suffixIcon: IconButton(
+                icon: const Icon(Icons.search),
+                onPressed: onSubmit,
               ),
-              onSubmitted: (_) => onSubmit(),
             ),
-          ],
-        ),
+            onSubmitted: (_) => onSubmit(),
+          ),
+
+          if (showScanner)
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                icon: const Icon(Icons.qr_code_scanner),
+                label: const Text("Scan"),
+                onPressed: () async {
+                  final code = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const BarcodeScannerPage(),
+                    ),
+                  );
+
+                  if (code != null) {
+                    controller.text = code;
+                    onSubmit();
+                  }
+                },
+              ),
+            ),
+        ],
       ),
-    );
-  }
+    ),
+  );
+}
 }
