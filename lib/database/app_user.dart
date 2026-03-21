@@ -21,6 +21,10 @@ class AppUser {
   final int age;
   final int activityLevel;
 
+  /// Biological sex for Mifflin-St Jeor calculation.
+  /// 0 = not specified, 1 = male, 2 = female.
+  final int sex;
+
   /// Weekly weight-loss target in kg (0 = maintain).
   /// Used to compute the calorie deficit: deficit = weeklyLossKg × 7700 / 7.
   final double weeklyLossKg;
@@ -36,6 +40,7 @@ class AppUser {
     this.weightKg = 0,
     this.age = 0,
     this.activityLevel = 0,
+    this.sex = 0,
     this.weeklyLossKg = 0.0,
   });
 
@@ -53,6 +58,7 @@ class AppUser {
     int? weightKg,
     int? age,
     int? activityLevel,
+    int? sex,
     double? weeklyLossKg,
   }) =>
       AppUser(
@@ -66,6 +72,7 @@ class AppUser {
         weightKg: weightKg ?? this.weightKg,
         age: age ?? this.age,
         activityLevel: activityLevel ?? this.activityLevel,
+        sex: sex ?? this.sex,
         weeklyLossKg: weeklyLossKg ?? this.weeklyLossKg,
       );
 
@@ -80,6 +87,7 @@ class AppUser {
         'weight_kg': weightKg,
         'age': age,
         'activity_level': activityLevel,
+        'sex': sex,
         'weekly_loss_kg': weeklyLossKg,
       };
 
@@ -94,6 +102,7 @@ class AppUser {
         weightKg: (map['weight_kg'] as int?) ?? 0,
         age: (map['age'] as int?) ?? 0,
         activityLevel: (map['activity_level'] as int?) ?? 0,
+        sex: (map['sex'] as int?) ?? 0,
         weeklyLossKg: (map['weekly_loss_kg'] as num?)?.toDouble() ?? 0.0,
       );
 }

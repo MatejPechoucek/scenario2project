@@ -384,17 +384,15 @@ class _CalorieDonut extends StatelessWidget {
         // Remaining / Over label below the ring
         Text(
           overGoal
-              ? '+${(consumed - goal).toStringAsFixed(0)} over'
+              ? '${(consumed - goal).toStringAsFixed(0)} extra'
               : '${remaining.toStringAsFixed(0)} left',
           style: theme.textTheme.labelSmall?.copyWith(
-            color: overGoal
-                ? theme.colorScheme.tertiary
-                : theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
+            color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
             fontWeight: FontWeight.w600,
           ),
         ),
         Text(
-          'of ${goal.toStringAsFixed(0)} kcal',
+          overGoal ? 'above goal today' : 'of ${goal.toStringAsFixed(0)} kcal',
           style: theme.textTheme.labelSmall?.copyWith(
             color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.5),
             fontSize: 10,
@@ -440,7 +438,7 @@ class _MacroRing extends StatelessWidget {
                   sections: [
                     PieChartSectionData(
                       value: progress.clamp(0.001, 1.0),
-                      color: over ? theme.colorScheme.tertiary : color,
+                      color: over ? theme.colorScheme.secondary : color,
                       title: '',
                       radius: 10,
                       borderSide: BorderSide.none,

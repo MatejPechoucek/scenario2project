@@ -14,6 +14,7 @@ import 'meal.dart';
 ///   v3 — meal_slot column added to meals
 ///   v4 — app_user table added; food_log table added
 ///   v5 — calculator inputs + weeklyLossKg added to app_user
+///   v6 — sex column added to app_user
 class DbHelper {
   static Database? _db;
 
@@ -28,7 +29,7 @@ class DbHelper {
     final path = join(await getDatabasesPath(), 'diet_plan.db');
     return openDatabase(
       path,
-      version: 5,
+      version: 6,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -88,6 +89,10 @@ class DbHelper {
         await db.execute(sql);
       }
     }
+    if (oldVersion < 6) {
+      await db.execute(
+          'ALTER TABLE app_user ADD COLUMN sex INTEGER DEFAULT 0');
+    }
   }
 
   // ── Schema helpers ────────────────────────────────────────────────────────
@@ -142,6 +147,7 @@ class DbHelper {
         weight_kg           INTEGER NOT NULL DEFAULT 0,
         age                 INTEGER NOT NULL DEFAULT 0,
         activity_level      INTEGER NOT NULL DEFAULT 0,
+        sex                 INTEGER NOT NULL DEFAULT 0,
         weekly_loss_kg      REAL NOT NULL DEFAULT 0
       )
     ''');
@@ -528,5 +534,77 @@ class DbHelper {
         whereArgs: ['%$query%', cutoff],
         limit: 20);
     return rows.map(FoodItem.fromMap).toList();
+  }
+
+  // ── Nutrition rolling averages ─────────────────────────────────────────────
+
+  /// Returns daily nutrition averages over the last [days] calendar days
+  /// that have at least one food log entry.
+  ///
+  /// Keys: 'calories', 'protein', 'fat', 'carbs', 'sugar', 'fiber', 'days'
+  /// 'days' is the number of days with data in the window.
+  static Future<Map<String, double>> getRollingAverages(int days) async {
+    final db = await database;
+    final today = DateTime.now();
+    final startDate = today.subtract(Duration(days: days - 1));
+    final startStr =
+        '${startDate.year}-'
+        '${startDate.month.toString().padLeft(2, '0')}-'
+        '${startDate.day.toString().padLeft(2, '0')}';
+
+    final result = await db.rawQuery('''
+      SELECT
+        AVG(dc) AS avg_cal,
+        AVG(dp) AS avg_pro,
+        AVG(df) AS avg_fat,
+        AVG(dcarbs) AS avg_carbs,
+        AVG(ds) AS avg_sug,
+        AVG(dfi) AS avg_fib,
+        COUNT(*) AS days_with_data
+      FROM (
+        SELECT
+          logged_date,
+          SUM(calories)   AS dc,
+          SUM(protein_g)  AS dp,
+          SUM(fat_g)      AS df,
+          SUM(carbs_g)    AS dcarbs,
+          SUM(sugar_g)    AS ds,
+          SUM(fiber_g)    AS dfi
+        FROM food_log
+        WHERE logged_date >= ?
+        GROUP BY logged_date
+      )
+    ''', [startStr]);
+
+    if (result.isEmpty || result.first['avg_cal'] == null) {
+      return {
+        'calories': 0, 'protein': 0, 'fat': 0,
+        'carbs': 0, 'sugar': 0, 'fiber': 0, 'days': 0,
+      };
+    }
+    final row = result.first;
+    return {
+      'calories': (row['avg_cal'] as num).toDouble(),
+      'protein':  (row['avg_pro'] as num).toDouble(),
+      'fat':      (row['avg_fat'] as num).toDouble(),
+      'carbs':    (row['avg_carbs'] as num).toDouble(),
+      'sugar':    (row['avg_sug'] as num).toDouble(),
+      'fiber':    (row['avg_fib'] as num).toDouble(),
+      'days':     (row['days_with_data'] as num).toDouble(),
+    };
+  }
+
+  /// Returns food log entries between [startDate] and [endDate] inclusive
+  /// (format 'YYYY-MM-DD'), ordered by date ascending then logged_at.
+  static Future<List<FoodLogEntry>> getFoodLogForDateRange(
+      String startDate, String endDate) async {
+    final db = await database;
+    final rows = await db.query(
+      'food_log',
+      where: 'logged_date >= ? AND logged_date <= ?',
+      whereArgs: [startDate, endDate],
+      orderBy: 'logged_date ASC, logged_at ASC',
+    );
+    return rows.map(FoodLogEntry.fromMap).toList();
   }
 }
