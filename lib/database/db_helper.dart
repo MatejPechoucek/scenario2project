@@ -57,20 +57,16 @@ class DbHelper {
         'ALTER TABLE meals ADD COLUMN sodium_mg REAL DEFAULT 0',
         'ALTER TABLE meals ADD COLUMN fiber_g REAL DEFAULT 0',
       ]) {
-        await db.execute(col);
+        await _safeAddColumn(db, col);
       }
       await _backfillMealNutrition(db);
       await _createFoodCacheTable(db);
     }
     if (oldVersion < 3) {
-      await db.execute(
-          "ALTER TABLE meals ADD COLUMN meal_slot TEXT DEFAULT 'any'");
-      await db.execute(
-          "UPDATE meals SET meal_slot = 'breakfast' WHERE name = 'Breakfast'");
-      await db.execute(
-          "UPDATE meals SET meal_slot = 'lunch' WHERE name = 'Lunch'");
-      await db.execute(
-          "UPDATE meals SET meal_slot = 'dinner' WHERE name = 'Dinner'");
+      await _safeAddColumn(db, "ALTER TABLE meals ADD COLUMN meal_slot TEXT DEFAULT 'any'");
+      await db.execute("UPDATE meals SET meal_slot = 'breakfast' WHERE name = 'Breakfast'");
+      await db.execute("UPDATE meals SET meal_slot = 'lunch' WHERE name = 'Lunch'");
+      await db.execute("UPDATE meals SET meal_slot = 'dinner' WHERE name = 'Dinner'");
     }
     if (oldVersion < 4) {
       await _createAppUserTable(db);
@@ -86,12 +82,22 @@ class DbHelper {
         'ALTER TABLE app_user ADD COLUMN activity_level INTEGER DEFAULT 0',
         'ALTER TABLE app_user ADD COLUMN weekly_loss_kg REAL DEFAULT 0',
       ]) {
-        await db.execute(sql);
+        await _safeAddColumn(db, sql);
       }
     }
     if (oldVersion < 6) {
-      await db.execute(
-          'ALTER TABLE app_user ADD COLUMN sex INTEGER DEFAULT 0');
+      await _safeAddColumn(db, 'ALTER TABLE app_user ADD COLUMN sex INTEGER DEFAULT 0');
+    }
+  }
+
+  /// Executes an ALTER TABLE ADD COLUMN statement, ignoring errors if the
+  /// column already exists. This handles cases where _createAppUserTable was
+  /// called with the full schema during an earlier migration step.
+  static Future<void> _safeAddColumn(Database db, String sql) async {
+    try {
+      await db.execute(sql);
+    } catch (e) {
+      if (!e.toString().contains('duplicate column')) rethrow;
     }
   }
 
