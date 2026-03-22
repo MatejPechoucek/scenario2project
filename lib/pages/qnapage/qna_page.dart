@@ -37,6 +37,12 @@ class _QnaPageState extends State<QnaPage> {
   final TextEditingController logFoodController = TextEditingController();
   final TextEditingController askExpertController = TextEditingController();
 
+  String faqAnswer = "";
+  String foodSearchAnswer = "";
+  String logFoodAnswer = "";
+  String expertAnswer = "";
+
+
   @override
   void dispose() {
     faqController.dispose();
@@ -56,43 +62,65 @@ class _QnaPageState extends State<QnaPage> {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            _buildSection(
-              title: "Search FAQs",
-              icon: Icons.help_outline,
-              controller: faqController,
-              hint: "Search common questions...",
-              onSubmit: () {
-                print("FAQ search: ${faqController.text}");
-              },
-            ),
-            _buildSection(
-              title: "Search Food Items",
-              icon: Icons.fastfood,
-              controller: foodSearchController,
-              hint: "Search food (e.g. apple, pizza)...",
-              showScanner: true,
-              onSubmit: () {
-                print("Food search: ${foodSearchController.text}");
-              },
-            ),
-            _buildSection(
-              title: "Log New Food Item",
-              icon: Icons.add_circle,
-              controller: logFoodController,
-              hint: "Enter food to log...",
-              onSubmit: () {
-                print("Log food: ${logFoodController.text}");
-              },
-            ),
-            _buildSection(
-              title: "Ask an Expert",
-              icon: Icons.medical_services,
-              controller: askExpertController,
-              hint: "Type your question...",
-              onSubmit: () {
-                print("Ask expert: ${askExpertController.text}");
-              },
-            ),
+          _buildSection(
+            title: "Search FAQs",
+            icon: Icons.help_outline,
+            controller: faqController,
+            hint: "Search common questions...",
+            response: faqAnswer,
+            onSubmit: () {
+              setState(() {
+                if (faqController.text.toLowerCase().contains("calories")) {
+                  faqAnswer = "Calories measure the energy in food.";
+                } else {
+                  faqAnswer = "No FAQ found. Try another question.";
+                }
+              });
+            },
+          ),
+          _buildSection(
+            title: "Search Food Items",
+            icon: Icons.fastfood,
+            controller: foodSearchController,
+            hint: "Search food (e.g. apple, pizza)...",
+            showScanner: true,
+            response: foodSearchAnswer,
+            onSubmit: () {
+              setState(() {
+                if (foodSearchController.text.toLowerCase() == "apple") {
+                  foodSearchAnswer = "Apple: ~52 kcal per 100g";
+                } else if (foodSearchController.text.toLowerCase() == "pizza") {
+                  foodSearchAnswer = "Pizza: ~266 kcal per slice";
+                } else {
+                  foodSearchAnswer = "Food not found.";
+                }
+              });
+            },
+          ),
+          _buildSection(
+            title: "Log New Food Item",
+            icon: Icons.add_circle,
+            controller: logFoodController,
+            hint: "Enter food to log...",
+            response: logFoodAnswer,
+            onSubmit: () {
+              setState(() {
+                logFoodAnswer = "Food '${logFoodController.text}' logged successfully!";
+              });
+            },
+          ),
+          _buildSection(
+            title: "Ask an Expert",
+            icon: Icons.medical_services,
+            controller: askExpertController,
+            hint: "Type your question...",
+            response: expertAnswer,
+            onSubmit: () {
+              setState(() {
+                expertAnswer = "An expert will respond to your question soon.";
+              });
+            },
+          ),
           ],
         ),
       ),
@@ -105,6 +133,7 @@ Widget _buildSection({
   required TextEditingController controller,
   required String hint,
   required VoidCallback onSubmit,
+  String response = "",
   bool showScanner = false,
 }) {
   return Card(
@@ -155,6 +184,13 @@ Widget _buildSection({
                 },
               ),
             ),
+            if (response.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(
+              response,
+              style: const TextStyle(color: Colors.black87),
+            ),
+          ],
         ],
       ),
     ),
