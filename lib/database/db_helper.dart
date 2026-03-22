@@ -1,7 +1,9 @@
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
+import 'app_user.dart';
 import 'food_item.dart';
+import 'food_log_entry.dart';
 import 'meal.dart';
 
 /// Manages all local SQLite persistence for CleanEater.
@@ -9,7 +11,10 @@ import 'meal.dart';
 /// Database version history:
 ///   v1 — initial: meals(id, name, description, calories)
 ///   v2 — macro/micro columns added to meals; food_cache table added
-///   v3 — meal_slot column added to meals (breakfast/lunch/dinner/snack)
+///   v3 — meal_slot column added to meals
+///   v4 — app_user table added; food_log table added
+///   v5 — calculator inputs + weeklyLossKg added to app_user
+///   v6 — sex column added to app_user
 class DbHelper {
   static Database? _db;
 
@@ -24,7 +29,7 @@ class DbHelper {
     final path = join(await getDatabasesPath(), 'diet_plan.db');
     return openDatabase(
       path,
-      version: 3,
+      version: 6,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -34,13 +39,16 @@ class DbHelper {
   static Future<void> _onCreate(Database db, int version) async {
     await _createMealsTable(db);
     await _createFoodCacheTable(db);
+    await _createAppUserTable(db);
+    await _createFoodLogTable(db);
     await _seedMeals(db);
+    await _seedUser(db);
+    await _seedFoodLog(db);
   }
 
   /// Called when the existing database version < current version.
   static Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
-      // Add macro/micro columns to meals table.
       for (final col in [
         'ALTER TABLE meals ADD COLUMN protein_g REAL DEFAULT 0',
         'ALTER TABLE meals ADD COLUMN fat_g REAL DEFAULT 0',
@@ -49,21 +57,47 @@ class DbHelper {
         'ALTER TABLE meals ADD COLUMN sodium_mg REAL DEFAULT 0',
         'ALTER TABLE meals ADD COLUMN fiber_g REAL DEFAULT 0',
       ]) {
-        await db.execute(col);
+        await _safeAddColumn(db, col);
       }
       await _backfillMealNutrition(db);
       await _createFoodCacheTable(db);
     }
     if (oldVersion < 3) {
-      // Add meal_slot so the algorithm knows meal context (breakfast/lunch/dinner).
-      await db.execute(
-          "ALTER TABLE meals ADD COLUMN meal_slot TEXT DEFAULT 'any'");
-      await db.execute(
-          "UPDATE meals SET meal_slot = 'breakfast' WHERE name = 'Breakfast'");
-      await db.execute(
-          "UPDATE meals SET meal_slot = 'lunch' WHERE name = 'Lunch'");
-      await db.execute(
-          "UPDATE meals SET meal_slot = 'dinner' WHERE name = 'Dinner'");
+      await _safeAddColumn(db, "ALTER TABLE meals ADD COLUMN meal_slot TEXT DEFAULT 'any'");
+      await db.execute("UPDATE meals SET meal_slot = 'breakfast' WHERE name = 'Breakfast'");
+      await db.execute("UPDATE meals SET meal_slot = 'lunch' WHERE name = 'Lunch'");
+      await db.execute("UPDATE meals SET meal_slot = 'dinner' WHERE name = 'Dinner'");
+    }
+    if (oldVersion < 4) {
+      await _createAppUserTable(db);
+      await _createFoodLogTable(db);
+      await _seedUser(db);
+      await _seedFoodLog(db);
+    }
+    if (oldVersion < 5) {
+      for (final sql in [
+        'ALTER TABLE app_user ADD COLUMN height_cm INTEGER DEFAULT 0',
+        'ALTER TABLE app_user ADD COLUMN weight_kg INTEGER DEFAULT 0',
+        'ALTER TABLE app_user ADD COLUMN age INTEGER DEFAULT 0',
+        'ALTER TABLE app_user ADD COLUMN activity_level INTEGER DEFAULT 0',
+        'ALTER TABLE app_user ADD COLUMN weekly_loss_kg REAL DEFAULT 0',
+      ]) {
+        await _safeAddColumn(db, sql);
+      }
+    }
+    if (oldVersion < 6) {
+      await _safeAddColumn(db, 'ALTER TABLE app_user ADD COLUMN sex INTEGER DEFAULT 0');
+    }
+  }
+
+  /// Executes an ALTER TABLE ADD COLUMN statement, ignoring errors if the
+  /// column already exists. This handles cases where _createAppUserTable was
+  /// called with the full schema during an earlier migration step.
+  static Future<void> _safeAddColumn(Database db, String sql) async {
+    try {
+      await db.execute(sql);
+    } catch (e) {
+      if (!e.toString().contains('duplicate column')) rethrow;
     }
   }
 
@@ -106,10 +140,49 @@ class DbHelper {
     ''');
   }
 
+  static Future<void> _createAppUserTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS app_user (
+        id                  INTEGER PRIMARY KEY,
+        name                TEXT NOT NULL DEFAULT 'User',
+        daily_calorie_goal  INTEGER NOT NULL DEFAULT 2000,
+        protein_g_goal      REAL NOT NULL DEFAULT 150,
+        fat_g_goal          REAL NOT NULL DEFAULT 65,
+        carbs_g_goal        REAL NOT NULL DEFAULT 250,
+        height_cm           INTEGER NOT NULL DEFAULT 0,
+        weight_kg           INTEGER NOT NULL DEFAULT 0,
+        age                 INTEGER NOT NULL DEFAULT 0,
+        activity_level      INTEGER NOT NULL DEFAULT 0,
+        sex                 INTEGER NOT NULL DEFAULT 0,
+        weekly_loss_kg      REAL NOT NULL DEFAULT 0
+      )
+    ''');
+  }
+
+  static Future<void> _createFoodLogTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS food_log (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        food_item_id  TEXT NOT NULL,
+        food_name     TEXT NOT NULL,
+        category      TEXT NOT NULL DEFAULT 'General',
+        serving_g     REAL NOT NULL,
+        calories      REAL NOT NULL,
+        protein_g     REAL NOT NULL DEFAULT 0,
+        fat_g         REAL NOT NULL DEFAULT 0,
+        carbs_g       REAL NOT NULL DEFAULT 0,
+        sugar_g       REAL NOT NULL DEFAULT 0,
+        sodium_mg     REAL NOT NULL DEFAULT 0,
+        fiber_g       REAL NOT NULL DEFAULT 0,
+        meal_slot     TEXT NOT NULL DEFAULT 'any',
+        logged_date   TEXT NOT NULL,
+        logged_at     INTEGER NOT NULL
+      )
+    ''');
+  }
+
   // ── Seed data ─────────────────────────────────────────────────────────────
 
-  /// Seeds the three default meals on a fresh install.
-  /// Nutritional values are approximate totals for a typical serving.
   static Future<void> _seedMeals(Database db) async {
     final meals = [
       const Meal(
@@ -154,7 +227,148 @@ class DbHelper {
     }
   }
 
-  /// Backfills nutritional data for existing seeded meals when upgrading v1→v2.
+  /// Inserts the single default user on fresh install or v3→v4 upgrade.
+  /// Uses INSERT OR IGNORE so it is safe to call multiple times.
+  static Future<void> _seedUser(Database db) async {
+    await db.execute('''
+      INSERT OR IGNORE INTO app_user
+        (id, name, daily_calorie_goal, protein_g_goal, fat_g_goal, carbs_g_goal)
+      VALUES (1, 'User', 2000, 150.0, 65.0, 250.0)
+    ''');
+  }
+
+  /// Public entry-point for startup seeding — called from main.dart after
+  /// migrations, so it works on both fresh installs and existing v4 DBs.
+  static Future<void> seedPlaceholderFoodLogIfEmpty() async {
+    final db = await database;
+    await _seedFoodLog(db);
+  }
+
+  /// Seeds 7 days of realistic placeholder food log entries.
+  /// Only runs if the food_log table is completely empty.
+  static Future<void> _seedFoodLog(Database db) async {
+    final existing = await db.rawQuery('SELECT COUNT(*) as c FROM food_log');
+    if ((existing.first['c'] as int) > 0) return;
+
+    final now = DateTime.now();
+
+    // Helper to build a date string N days ago.
+    String date(int daysAgo) {
+      final d = now.subtract(Duration(days: daysAgo));
+      return '${d.year}-'
+          '${d.month.toString().padLeft(2, '0')}-'
+          '${d.day.toString().padLeft(2, '0')}';
+    }
+
+    // Each entry: (food_item_id, food_name, category, serving_g,
+    //              calories, protein_g, fat_g, carbs_g, sugar_g,
+    //              sodium_mg, fiber_g, meal_slot, logged_date, logged_at)
+    final entries = <Map<String, Object?>>[
+      // ── 6 days ago ──────────────────────────────────────────────────────
+      _logRow('local_001', 'Porridge (Oats)',      'Breakfast Cereals', 250, 335, 11, 6.5, 59, 1.0, 18, 4.0, 'breakfast', date(6), now, -6, 0),
+      _logRow('local_002', 'Chicken Breast',       'Poultry',           180, 297, 55, 4.0, 0,  0.0, 180, 0.0,'lunch',     date(6), now, -6, 1),
+      _logRow('local_003', 'Brown Rice (cooked)',  'Grains',            160, 210, 4.4, 1.8, 44, 0.4, 8, 1.8, 'lunch',     date(6), now, -6, 2),
+      _logRow('local_004', 'Broccoli (steamed)',   'Vegetables',        100, 35,  2.8, 0.4, 6,  1.5, 40, 2.6,'lunch',     date(6), now, -6, 3),
+      _logRow('local_005', 'Salmon Fillet',        'Fish & Seafood',    200, 412, 40,  26,  0,  0.0, 120, 0.0,'dinner',    date(6), now, -6, 4),
+      _logRow('local_006', 'Sweet Potato (baked)', 'Vegetables',        150, 129, 2.3, 0.2, 30, 6.0, 56, 3.8,'dinner',    date(6), now, -6, 5),
+
+      // ── 5 days ago ──────────────────────────────────────────────────────
+      _logRow('local_007', 'Scrambled Eggs',       'Eggs & Dairy',      120, 192, 14,  14,  1.2,  1.0, 300, 0.0,'breakfast', date(5), now, -5, 0),
+      _logRow('local_008', 'Wholegrain Toast',     'Bread & Bakery',    60,  138, 5.0, 1.4, 27,  2.0, 200, 3.2,'breakfast', date(5), now, -5, 1),
+      _logRow('local_009', 'Tuna (in water)',      'Fish & Seafood',    130, 130, 29,  1.0, 0,   0.0, 330, 0.0,'lunch',     date(5), now, -5, 2),
+      _logRow('local_010', 'Mixed Salad Leaves',  'Salads',            80,  14,  1.2, 0.2, 2.4, 0.8, 28, 1.4, 'lunch',     date(5), now, -5, 3),
+      _logRow('local_011', 'Beef Stir Fry',        'Red Meat',          200, 380, 32,  22,  8,   4.0, 640, 2.0,'dinner',    date(5), now, -5, 4),
+      _logRow('local_012', 'Egg Noodles (cooked)', 'Grains',            150, 206, 7.2, 2.3, 40,  1.5, 18, 1.5, 'dinner',    date(5), now, -5, 5),
+      _logRow('local_013', 'Apple',                'Fruits',            150, 78,  0.4, 0.2, 20,  14,  1.5, 2.6,'snack',     date(5), now, -5, 6),
+
+      // ── 4 days ago ──────────────────────────────────────────────────────
+      _logRow('local_014', 'Greek Yogurt (plain)', 'Eggs & Dairy',      200, 116, 10,  5.0, 3.8, 3.8, 80, 0.0,'breakfast', date(4), now, -4, 0),
+      _logRow('local_015', 'Mixed Berries',        'Fruits',            100, 57,  0.8, 0.5, 14,  9.0, 2.0, 2.0,'breakfast', date(4), now, -4, 1),
+      _logRow('local_016', 'Lentil Soup',          'Legumes',           350, 280, 18,  3.5, 45,  6.0, 480, 9.5,'lunch',     date(4), now, -4, 2),
+      _logRow('local_017', 'Wholegrain Bread',     'Bread & Bakery',    60,  145, 5.5, 1.8, 27,  2.0, 240, 3.5,'lunch',     date(4), now, -4, 3),
+      _logRow('local_018', 'Grilled Salmon',       'Fish & Seafood',    180, 371, 36,  24,  0,   0.0, 108, 0.0,'dinner',    date(4), now, -4, 4),
+      _logRow('local_019', 'Asparagus (grilled)',  'Vegetables',        120, 26,  2.9, 0.2, 5,   2.0, 4,  2.4, 'dinner',    date(4), now, -4, 5),
+      _logRow('local_020', 'Almonds',              'Nuts & Seeds',      30,  174, 6.3, 15,  5.8, 1.0, 1.2, 2.1,'snack',     date(4), now, -4, 6),
+
+      // ── 3 days ago ──────────────────────────────────────────────────────
+      _logRow('local_021', 'Banana Smoothie',      'Beverages',         350, 263, 4.2, 1.4, 62,  42,  56, 2.4,'breakfast', date(3), now, -3, 0),
+      _logRow('local_022', 'Caesar Salad',         'Salads',            280, 364, 12,  28,  14,  4.0, 680, 2.0,'lunch',     date(3), now, -3, 1),
+      _logRow('local_023', 'Chicken Curry',        'Meals',             300, 420, 28,  18,  24,  6.0, 720, 3.0,'dinner',    date(3), now, -3, 2),
+      _logRow('local_024', 'Basmati Rice (cooked)','Grains',            180, 234, 5.0, 0.5, 52,  0.2, 4,  0.5, 'dinner',    date(3), now, -3, 3),
+      _logRow('local_025', 'Dark Chocolate (70%)', 'Desserts',          30,  161, 2.1, 12,  16,  12,  6.0, 2.7,'snack',     date(3), now, -3, 4),
+
+      // ── 2 days ago ──────────────────────────────────────────────────────
+      _logRow('local_026', 'Avocado Toast',        'Bread & Bakery',    180, 368, 7.8, 22,  33,  2.4, 340, 7.2,'breakfast', date(2), now, -2, 0),
+      _logRow('local_027', 'Turkey Wrap',          'Processed Meat',    220, 420, 30,  12,  42,  4.0, 820, 3.5,'lunch',     date(2), now, -2, 1),
+      _logRow('local_028', 'Margherita Pizza',     'Fast Food',         300, 690, 24,  24,  87,  9.0, 1260,4.5,'dinner',    date(2), now, -2, 2),
+      _logRow('local_029', 'Protein Bar',          'Supplements',       60,  228, 20,  8.0, 26,  10,  120, 4.0,'snack',     date(2), now, -2, 3),
+
+      // ── Yesterday ────────────────────────────────────────────────────────
+      _logRow('local_030', 'Pancakes (2 medium)',  'Bread & Bakery',    160, 366, 9.6, 14,  52,  12,  440, 1.6,'breakfast', date(1), now, -1, 0),
+      _logRow('local_031', 'Maple Syrup',          'Condiments',        20,  52,  0.0, 0.0, 13,  13,  0.8, 0.0,'breakfast', date(1), now, -1, 1),
+      _logRow('local_032', 'Cheeseburger',         'Fast Food',         220, 550, 28,  30,  40,  6.0, 890, 2.0,'lunch',     date(1), now, -1, 2),
+      _logRow('local_033', 'Sweet Potato Fries',   'Fast Food',         120, 192, 2.4, 8.4, 30,  4.0, 340, 3.0,'lunch',     date(1), now, -1, 3),
+      _logRow('local_034', 'Grilled Chicken',      'Poultry',           200, 330, 62,  8.0, 0,   0.0, 200, 0.0,'dinner',    date(1), now, -1, 4),
+      _logRow('local_035', 'Steamed Vegetables',   'Vegetables',        180, 63,  3.6, 0.5, 13,  5.0, 36, 4.2, 'dinner',    date(1), now, -1, 5),
+
+      // ── Today ────────────────────────────────────────────────────────────
+      _logRow('local_036', 'Oats with Honey',      'Breakfast Cereals', 200, 340, 9.0, 5.5, 62,  14,  20, 4.8,'breakfast', date(0), now, 0,  0),
+      _logRow('local_037', 'Orange Juice',         'Beverages',         200, 86,  1.4, 0.2, 20,  18,  4.0, 0.4,'breakfast', date(0), now, 0,  1),
+      _logRow('local_038', 'Tuna Salad',           'Fish & Seafood',    250, 310, 36,  10,  14,  3.0, 420, 3.2,'lunch',     date(0), now, 0,  2),
+    ];
+
+    final batch = db.batch();
+    for (final e in entries) {
+      batch.insert('food_log', e);
+    }
+    await batch.commit(noResult: true);
+  }
+
+  /// Builds a food_log row map from individual fields.
+  static Map<String, Object?> _logRow(
+    String id,
+    String name,
+    String category,
+    double servingG,
+    double calories,
+    double proteinG,
+    double fatG,
+    double carbsG,
+    double sugarG,
+    double sodiumMg,
+    double fiberG,
+    String mealSlot,
+    String loggedDate,
+    DateTime baseTime,
+    int dayOffset,
+    int sequence,
+  ) {
+    // Spread entries across the day: breakfast ~7am, lunch ~12pm, dinner ~7pm, snack ~3pm.
+    const slotHours = {'breakfast': 7, 'lunch': 12, 'dinner': 19, 'snack': 15};
+    final hour = slotHours[mealSlot] ?? 12;
+    final ts = DateTime(
+      baseTime.year, baseTime.month, baseTime.day,
+      hour, sequence * 3, // offset by minutes so ordering is stable
+    ).subtract(Duration(days: -dayOffset)).millisecondsSinceEpoch;
+
+    return {
+      'food_item_id': id,
+      'food_name': name,
+      'category': category,
+      'serving_g': servingG,
+      'calories': calories,
+      'protein_g': proteinG,
+      'fat_g': fatG,
+      'carbs_g': carbsG,
+      'sugar_g': sugarG,
+      'sodium_mg': sodiumMg,
+      'fiber_g': fiberG,
+      'meal_slot': mealSlot,
+      'logged_date': loggedDate,
+      'logged_at': ts,
+    };
+  }
+
   static Future<void> _backfillMealNutrition(Database db) async {
     final updates = [
       {
@@ -213,6 +427,71 @@ class DbHelper {
     return db.delete('meals', where: 'id = ?', whereArgs: [id]);
   }
 
+  // ── User CRUD ─────────────────────────────────────────────────────────────
+
+  /// Returns the single app user (id=1). Creates default if missing.
+  static Future<AppUser> getUser() async {
+    final db = await database;
+    final rows = await db.query('app_user', where: 'id = ?', whereArgs: [1]);
+    if (rows.isEmpty) {
+      await _seedUser(db);
+      final fresh = await db.query('app_user', where: 'id = ?', whereArgs: [1]);
+      return AppUser.fromMap(fresh.first);
+    }
+    return AppUser.fromMap(rows.first);
+  }
+
+  static Future<void> updateUser(AppUser user) async {
+    final db = await database;
+    await db.update('app_user', user.toMap(),
+        where: 'id = ?', whereArgs: [user.id]);
+  }
+
+  // ── Food log CRUD ─────────────────────────────────────────────────────────
+
+  /// Inserts a new food log entry. Returns the new row id.
+  static Future<int> logFood(FoodLogEntry entry) async {
+    final db = await database;
+    return db.insert('food_log', entry.toMap());
+  }
+
+  /// Returns all entries logged on [date] (format 'YYYY-MM-DD'),
+  /// ordered by logged_at ascending.
+  static Future<List<FoodLogEntry>> getFoodLogForDate(String date) async {
+    final db = await database;
+    final rows = await db.query(
+      'food_log',
+      where: 'logged_date = ?',
+      whereArgs: [date],
+      orderBy: 'logged_at ASC',
+    );
+    return rows.map(FoodLogEntry.fromMap).toList();
+  }
+
+  /// Returns all food log entries across all dates, newest first.
+  /// Useful for the history view.
+  static Future<List<FoodLogEntry>> getAllFoodLog() async {
+    final db = await database;
+    final rows = await db.query('food_log', orderBy: 'logged_at DESC');
+    return rows.map(FoodLogEntry.fromMap).toList();
+  }
+
+  /// Deletes a specific food log entry by its id.
+  static Future<int> deleteFoodLogEntry(int id) async {
+    final db = await database;
+    return db.delete('food_log', where: 'id = ?', whereArgs: [id]);
+  }
+
+  /// Returns the total calories logged for a given date.
+  static Future<double> getTotalCaloriesForDate(String date) async {
+    final db = await database;
+    final result = await db.rawQuery(
+      'SELECT COALESCE(SUM(calories), 0) AS total FROM food_log WHERE logged_date = ?',
+      [date],
+    );
+    return (result.first['total'] as num).toDouble();
+  }
+
   // ── Food cache CRUD ───────────────────────────────────────────────────────
 
   static const int _cacheTtlMs = 24 * 60 * 60 * 1000;
@@ -261,5 +540,77 @@ class DbHelper {
         whereArgs: ['%$query%', cutoff],
         limit: 20);
     return rows.map(FoodItem.fromMap).toList();
+  }
+
+  // ── Nutrition rolling averages ─────────────────────────────────────────────
+
+  /// Returns daily nutrition averages over the last [days] calendar days
+  /// that have at least one food log entry.
+  ///
+  /// Keys: 'calories', 'protein', 'fat', 'carbs', 'sugar', 'fiber', 'days'
+  /// 'days' is the number of days with data in the window.
+  static Future<Map<String, double>> getRollingAverages(int days) async {
+    final db = await database;
+    final today = DateTime.now();
+    final startDate = today.subtract(Duration(days: days - 1));
+    final startStr =
+        '${startDate.year}-'
+        '${startDate.month.toString().padLeft(2, '0')}-'
+        '${startDate.day.toString().padLeft(2, '0')}';
+
+    final result = await db.rawQuery('''
+      SELECT
+        AVG(dc) AS avg_cal,
+        AVG(dp) AS avg_pro,
+        AVG(df) AS avg_fat,
+        AVG(dcarbs) AS avg_carbs,
+        AVG(ds) AS avg_sug,
+        AVG(dfi) AS avg_fib,
+        COUNT(*) AS days_with_data
+      FROM (
+        SELECT
+          logged_date,
+          SUM(calories)   AS dc,
+          SUM(protein_g)  AS dp,
+          SUM(fat_g)      AS df,
+          SUM(carbs_g)    AS dcarbs,
+          SUM(sugar_g)    AS ds,
+          SUM(fiber_g)    AS dfi
+        FROM food_log
+        WHERE logged_date >= ?
+        GROUP BY logged_date
+      )
+    ''', [startStr]);
+
+    if (result.isEmpty || result.first['avg_cal'] == null) {
+      return {
+        'calories': 0, 'protein': 0, 'fat': 0,
+        'carbs': 0, 'sugar': 0, 'fiber': 0, 'days': 0,
+      };
+    }
+    final row = result.first;
+    return {
+      'calories': (row['avg_cal'] as num).toDouble(),
+      'protein':  (row['avg_pro'] as num).toDouble(),
+      'fat':      (row['avg_fat'] as num).toDouble(),
+      'carbs':    (row['avg_carbs'] as num).toDouble(),
+      'sugar':    (row['avg_sug'] as num).toDouble(),
+      'fiber':    (row['avg_fib'] as num).toDouble(),
+      'days':     (row['days_with_data'] as num).toDouble(),
+    };
+  }
+
+  /// Returns food log entries between [startDate] and [endDate] inclusive
+  /// (format 'YYYY-MM-DD'), ordered by date ascending then logged_at.
+  static Future<List<FoodLogEntry>> getFoodLogForDateRange(
+      String startDate, String endDate) async {
+    final db = await database;
+    final rows = await db.query(
+      'food_log',
+      where: 'logged_date >= ? AND logged_date <= ?',
+      whereArgs: [startDate, endDate],
+      orderBy: 'logged_date ASC, logged_at ASC',
+    );
+    return rows.map(FoodLogEntry.fromMap).toList();
   }
 }

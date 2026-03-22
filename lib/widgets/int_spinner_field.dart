@@ -4,12 +4,14 @@ import 'package:flutter/services.dart';
 class IntSpinnerField extends StatefulWidget {
   final String label;
   final int max;
+  final int initialValue;
   final ValueChanged<int> onChanged;
 
   const IntSpinnerField({
     super.key,
     required this.label,
     required this.max,
+    this.initialValue = 0,
     required this.onChanged,
   });
 
@@ -19,7 +21,9 @@ class IntSpinnerField extends StatefulWidget {
 
 class _IntSpinnerFieldState extends State<IntSpinnerField>
     with WidgetsBindingObserver {
-  final _controller = TextEditingController(text: '0');
+  late final _controller = TextEditingController(
+    text: widget.initialValue.toString(),
+  );
   final _focusNode = FocusNode();
   OverlayEntry? _overlayEntry;
 

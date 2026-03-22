@@ -55,11 +55,21 @@ class _SplashScreenState extends State<_SplashScreen> {
   }
 
   Future<void> _init() async {
-    // Run in parallel: load bundled JSON asset + warm up SQLite (migrations).
-    await Future.wait([
-      FoodRepository.initialize(),
-      DbHelper.database,
-    ]);
+    try {
+      // Run in parallel: load bundled JSON asset + warm up SQLite (runs migrations,
+      // creates tables, seeds the default user if needed).
+      await Future.wait([
+        FoodRepository.initialize(),
+        DbHelper.database,
+      ]);
+      // Ensure the single app user exists (idempotent).
+      await DbHelper.getUser();
+      // Seed placeholder food log on first run (no-op if data already exists).
+      await DbHelper.seedPlaceholderFoodLogIfEmpty();
+    } catch (e, st) {
+      debugPrint('CleanEater init error: $e\n$st');
+      // Continue anyway — the app can still function with defaults.
+    }
     if (mounted) {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const MainShell()),
