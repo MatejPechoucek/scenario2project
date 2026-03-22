@@ -1841,9 +1841,12 @@ class _SexSelector extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         child: Row(
           children: [
-            Text('Biological sex',
-                style: theme.textTheme.labelMedium
-                    ?.copyWith(color: cs.onSurfaceVariant)),
+            Flexible(
+              child: Text('Biological sex',
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelMedium
+                      ?.copyWith(color: cs.onSurfaceVariant)),
+            ),
             const SizedBox(width: 8),
             Text(
               '(affects TDEE)',

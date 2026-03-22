@@ -1,58 +1,7 @@
-import 'dart:io' show Platform;
-
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../database/food_item.dart';
 import '../../services/food_repository.dart';
-
-bool get _isMobile =>
-    !kIsWeb && (Platform.isAndroid || Platform.isIOS);
-
-// ── Barcode scanner page (mobile only) ────────────────────────────────────────
-
-class BarcodeScannerPage extends StatelessWidget {
-  const BarcodeScannerPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final cs = theme.colorScheme;
-
-    if (!_isMobile) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Scan Barcode')),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.qr_code_scanner,
-                  size: 72, color: cs.onSurfaceVariant),
-              const SizedBox(height: 16),
-              Text(
-                'Barcode scanning is only available\non iOS and Android.',
-                style: theme.textTheme.bodyLarge
-                    ?.copyWith(color: cs.onSurfaceVariant),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return Scaffold(
-      appBar: AppBar(title: const Text('Scan Barcode')),
-      body: MobileScanner(
-        onDetect: (capture) {
-          final code = capture.barcodes.first.rawValue;
-          if (code != null) Navigator.pop(context, code);
-        },
-      ),
-    );
-  }
-}
 
 class QnaPage extends StatefulWidget {
   const QnaPage({super.key});
@@ -317,7 +266,7 @@ class _QnaPageState extends State<QnaPage> {
                         ),
                       ),
                     ),
-                    if (_isMobile) ...[
+                    ...[
                       const SizedBox(height: 6),
                       Align(
                         alignment: Alignment.centerRight,
@@ -326,17 +275,11 @@ class _QnaPageState extends State<QnaPage> {
                           label: const Text('Scan Barcode'),
                           style: TextButton.styleFrom(
                               visualDensity: VisualDensity.compact),
-                          onPressed: () async {
-                            final code = await Navigator.push<String>(
-                              context,
-                              MaterialPageRoute(
-                                  builder: (_) =>
-                                      const BarcodeScannerPage()),
+                          onPressed: () {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                  content: Text('Barcode scanning coming soon')),
                             );
-                            if (code != null && code.isNotEmpty) {
-                              _searchController.text = code;
-                              _onSearch(code);
-                            }
                           },
                         ),
                       ),
