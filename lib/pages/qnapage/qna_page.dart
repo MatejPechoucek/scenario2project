@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../database/db_helper.dart';
 import '../../database/food_item.dart';
 import '../../services/food_repository.dart';
 
@@ -13,6 +14,18 @@ class QnaPage extends StatefulWidget {
 class _QnaPageState extends State<QnaPage> {
   final _searchController = TextEditingController();
   final _expertController = TextEditingController();
+
+  // Add food form controllers
+  final _addNameCtrl = TextEditingController();
+  final _addCalCtrl = TextEditingController();
+  final _addProteinCtrl = TextEditingController();
+  final _addFatCtrl = TextEditingController();
+  final _addCarbsCtrl = TextEditingController();
+  final _addSugarCtrl = TextEditingController();
+  final _addSodiumCtrl = TextEditingController();
+  final _addFiberCtrl = TextEditingController();
+  String _addCategory = 'General';
+  bool _addFoodSubmitted = false;
 
   List<FoodItem> _searchResults = [];
   bool _searching = false;
@@ -108,6 +121,54 @@ class _QnaPageState extends State<QnaPage> {
     }
   }
 
+  // ── Add food to database ───────────────────────────────────────────────────
+
+  static const _categories = [
+    'General', 'Poultry', 'Fish & Seafood', 'Red Meat', 'Plant Protein',
+    'Legumes', 'Eggs & Dairy', 'Grains', 'Bread & Bakery', 'Breakfast Cereals',
+    'Vegetables', 'Salads', 'Fruits', 'Nuts & Seeds', 'Nut Butters', 'Snacks',
+    'Desserts', 'Fast Food', 'Meals', 'Processed Meat', 'Condiments', 'Soups',
+    'Beverages', 'Fats & Oils', 'Supplements',
+  ];
+
+  Future<void> _submitAddFood() async {
+    final name = _addNameCtrl.text.trim();
+    final cal = double.tryParse(_addCalCtrl.text.trim()) ?? 0;
+    final protein = double.tryParse(_addProteinCtrl.text.trim()) ?? 0;
+    final fat = double.tryParse(_addFatCtrl.text.trim()) ?? 0;
+    final carbs = double.tryParse(_addCarbsCtrl.text.trim()) ?? 0;
+    if (name.isEmpty || cal <= 0) return;
+
+    final item = FoodItem(
+      id: 'user_${DateTime.now().millisecondsSinceEpoch}',
+      name: name,
+      category: _addCategory,
+      calories: cal,
+      proteinG: protein,
+      fatG: fat,
+      carbsG: carbs,
+      sugarG: double.tryParse(_addSugarCtrl.text.trim()) ?? 0,
+      sodiumMg: double.tryParse(_addSodiumCtrl.text.trim()) ?? 0,
+      fiberG: double.tryParse(_addFiberCtrl.text.trim()) ?? 0,
+      source: 'user',
+    );
+
+    await DbHelper.cacheFoodItem(item);
+
+    setState(() => _addFoodSubmitted = true);
+    for (final c in [
+      _addNameCtrl, _addCalCtrl, _addProteinCtrl, _addFatCtrl,
+      _addCarbsCtrl, _addSugarCtrl, _addSodiumCtrl, _addFiberCtrl,
+    ]) {
+      c.clear();
+    }
+    setState(() => _addCategory = 'General');
+
+    Future.delayed(const Duration(seconds: 4), () {
+      if (mounted) setState(() => _addFoodSubmitted = false);
+    });
+  }
+
   // ── Expert queue ───────────────────────────────────────────────────────────
 
   void _submitExpert() {
@@ -127,6 +188,15 @@ class _QnaPageState extends State<QnaPage> {
   void dispose() {
     _searchController.dispose();
     _expertController.dispose();
+    _addNameCtrl.dispose();
+    _addCalCtrl.dispose();
+
+    _addProteinCtrl.dispose();
+    _addFatCtrl.dispose();
+    _addCarbsCtrl.dispose();
+    _addSugarCtrl.dispose();
+    _addSodiumCtrl.dispose();
+    _addFiberCtrl.dispose();
     super.dispose();
   }
 
@@ -299,6 +369,171 @@ class _QnaPageState extends State<QnaPage> {
                         ),
                       ),
                     ],
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 24),
+
+            // ── Add Food ───────────────────────────────────────────────
+            _SectionHeader(
+              icon: Icons.add_circle_outline_rounded,
+              title: 'Add Food to Database',
+            ),
+            const SizedBox(height: 8),
+            Card(
+              elevation: 0,
+              color: cs.surfaceContainerHighest,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Can\'t find a food? Add it yourself. Values are per 100 g.',
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: cs.onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 12),
+                    _AddFoodField(
+                      controller: _addNameCtrl,
+                      label: 'Food name *',
+                      hint: 'e.g. Homemade chicken burrito',
+                      icon: Icons.restaurant_menu,
+                    ),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<String>(
+                      initialValue: _addCategory,
+                      decoration: InputDecoration(
+                        labelText: 'Category',
+                        prefixIcon: const Icon(Icons.category_outlined, size: 20),
+                        filled: true,
+                        fillColor: cs.surface,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 14),
+                      ),
+                      items: _categories
+                          .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                          .toList(),
+                      onChanged: (v) =>
+                          setState(() => _addCategory = v ?? 'General'),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _AddFoodField(
+                            controller: _addCalCtrl,
+                            label: 'Calories (kcal) *',
+                            hint: '0',
+                            icon: Icons.local_fire_department_outlined,
+                            numeric: true,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _AddFoodField(
+                            controller: _addProteinCtrl,
+                            label: 'Protein (g)',
+                            hint: '0',
+                            icon: Icons.fitness_center,
+                            numeric: true,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _AddFoodField(
+                            controller: _addFatCtrl,
+                            label: 'Fat (g)',
+                            hint: '0',
+                            numeric: true,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _AddFoodField(
+                            controller: _addCarbsCtrl,
+                            label: 'Carbs (g)',
+                            hint: '0',
+                            numeric: true,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _AddFoodField(
+                            controller: _addSugarCtrl,
+                            label: 'Sugar (g)',
+                            hint: '0',
+                            numeric: true,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _AddFoodField(
+                            controller: _addSodiumCtrl,
+                            label: 'Sodium (mg)',
+                            hint: '0',
+                            numeric: true,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _AddFoodField(
+                            controller: _addFiberCtrl,
+                            label: 'Fibre (g)',
+                            hint: '0',
+                            numeric: true,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    if (_addFoodSubmitted)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: cs.primaryContainer,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.check_circle_outline,
+                                color: cs.primary, size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Food added! It will appear in search results.',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                    color: cs.onPrimaryContainer),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    else
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.tonal(
+                          onPressed: _submitAddFood,
+                          child: const Text('Add Food'),
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -530,6 +765,48 @@ class _FoodResultTile extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Add-food text field ────────────────────────────────────────────────────────
+
+class _AddFoodField extends StatelessWidget {
+  final TextEditingController controller;
+  final String label;
+  final String hint;
+  final IconData? icon;
+  final bool numeric;
+  const _AddFoodField({
+    required this.controller,
+    required this.label,
+    required this.hint,
+    this.icon,
+    this.numeric = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return TextField(
+      controller: controller,
+      keyboardType: numeric
+          ? const TextInputType.numberWithOptions(decimal: true)
+          : TextInputType.text,
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        prefixIcon: icon != null ? Icon(icon, size: 18) : null,
+        filled: true,
+        fillColor: cs.surface,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        isDense: true,
       ),
     );
   }
