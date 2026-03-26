@@ -23,6 +23,13 @@ class DbHelper {
     return _db!;
   }
 
+  /// Closes and resets the database singleton.
+  /// Only call this from tests — it lets each test start with a clean DB.
+  static Future<void> closeForTesting() async {
+    await _db?.close();
+    _db = null;
+  }
+
   // ── Initialisation ────────────────────────────────────────────────────────
 
   static Future<Database> _init() async {

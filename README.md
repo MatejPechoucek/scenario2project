@@ -20,7 +20,8 @@ Targets Windows desktop (primary development platform), Android, and iOS.
 
 ## Prerequisites
 
-- Flutter SDK 3.x or later — [install guide](https://docs.flutter.dev/get-started/install)
+- Flutter SDK 3.x or later — https://docs.flutter.dev/get-started/install
+- Dart SDK ^3.11.0
 - For Android builds: Android Studio with SDK tools
 - For iOS builds: Xcode (macOS only)
 - For Windows builds: Visual Studio with the "Desktop development with C++" workload
@@ -33,13 +34,11 @@ flutter doctor
 
 ---
 
-## Running the app
+## Getting Started
 
-Clone the repo and install dependencies first:
+Install dependencies:
 
 ```bash
-git clone https://github.com/MatejPechoucek/scenario2project
-cd scenario2project
 flutter pub get
 ```
 
@@ -66,9 +65,9 @@ flutter run -d ios
 
 ---
 
-## USDA API key setup
+## USDA API Key Setup
 
-Food search falls back to the USDA FoodData Central API when local results are limited. The key is not committed to the repo. Create the file manually:
+Food search falls back to the USDA FoodData Central API when local results are limited. The key is not included in the submission. Create the file manually before running:
 
 **`lib/config/api_config.dart`**
 
@@ -85,11 +84,13 @@ const int kNutrientIdSodium  = 1093;
 const int kNutrientIdFiber   = 1079;
 ```
 
-Get a free key at [api.data.gov/signup](https://api.data.gov/signup). Without it the app still works using the 250 bundled foods only.
+Get a free key at https://api.data.gov/signup
+
+Without a key the app still works fully using the 250 bundled foods only.
 
 ---
 
-## First launch
+## First Launch
 
 On first run the app:
 
@@ -105,13 +106,13 @@ To reset to a clean state, delete the database file:
 
 ---
 
-## Project structure
+## Project Structure
 
 ```
 lib/
 ├── main.dart                             — entry point, splash screen, bottom nav shell
 ├── config/
-│   └── api_config.dart                   — USDA API key (gitignored)
+│   └── api_config.dart                   — USDA API key (not included, create manually)
 ├── database/
 │   ├── app_user.dart                     — single local user model
 │   ├── meal.dart                         — diet plan meal model
@@ -139,19 +140,6 @@ assets/
 └── data/
     └── base_foods.json                   — 250 curated foods (offline, Tier 1)
 ```
-
----
-
-## Branch workflow
-
-Do not commit directly to `master`. Create a branch for your work:
-
-```bash
-git checkout -b your-name/feature-description
-git push origin your-name/feature-description
-```
-
-Open a pull request when ready for review.
 
 ---
 
